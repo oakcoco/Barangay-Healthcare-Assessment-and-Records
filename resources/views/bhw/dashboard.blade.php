@@ -41,7 +41,10 @@
                     <p class="text-sm font-medium">{{ $e['title'] }}</p>
                     <p class="text-[11px] text-gray-500">{{ $e['date'] }} · {{ $e['venue'] }}</p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <button class="h-11 rounded-lg border border-black bg-white text-xs">Edit</button>
+                        <a href="/bhw/events/{{ $loop->iteration }}/edit" class="flex h-11 items-center justify-center rounded-lg border border-black bg-white text-xs">Edit</a>
+                        
+                        {{-- THIS IS THE DELETE BUTTON IF YOU EVER FIND NEED TO LINK IT TO THE DATABASE--}}
+                        
                         <button class="h-11 rounded-lg border border-black bg-white text-xs text-red-700">Delete</button>
                     </div>
                 </div>
@@ -55,6 +58,9 @@
                     <p class="text-sm font-medium">{{ $p['name'] }}</p>
                     <p class="text-[11px] text-gray-500">{{ $p['barangay'] }} · Resident</p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
+
+                        {{--VV BUTTONS FOR APPROVE AND REJECT VV--}}
+
                         <button class="h-11 rounded-lg bg-[#4E7A1D] text-xs font-medium text-white">Approve</button>
                         <button class="h-11 rounded-lg border border-black bg-white text-xs text-red-700">Reject</button>
                     </div>

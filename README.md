@@ -1,3 +1,34 @@
+ <div class="rounded-xl bg-white p-4 shadow">IT DEPENDS WHAT ACCOUNT IS SIGNED IN. 
+        <br><br>TEMPORARY UI PAGE.
+        <br><br> PLEASE CONFIGURE THE LINK TO NAVIGATE IN PAGE
+        <br><br> /bhw/dashboard
+        <br><br> /bhw/events/create
+        <br><br> /bhw/referrals
+        <br><br> /bhw/profile
+        <br><br> /bhw/events/1/edit
+        
+        <br><br> /register
+        <br><br> /login
+        <br><br> /login
+
+        <br><br> /resident/home
+        
+
+    </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

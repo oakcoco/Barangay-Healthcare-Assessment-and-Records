@@ -15,6 +15,7 @@ Route::view('/register', 'register');
 Route::view('/register/step-2', 'register-step2');
 
 // RESIDENT HOME PAGE
+
 Route::get('/resident/home', function () {
     return view('resident.home', [
         'resident' => [
@@ -38,12 +39,12 @@ Route::get('/resident/home', function () {
         'updated_by' => '[BHW name]',
         'updated_on' => '[Date]',
         'tiles' => [
-            ['label' => 'Blood pressure', 'value' => '[120/80]', 'unit' => 'mmHg'],
-            ['label' => 'Pulse rate', 'value' => '[#]', 'unit' => 'bpm'],
-            ['label' => 'Temperature', 'value' => '[#]', 'unit' => '°C'],
-            ['label' => 'Blood glucose', 'value' => '[#]', 'unit' => 'mg/dL'],
-            ['label' => 'Weight', 'value' => '[#]', 'unit' => 'kg'],
-            ['label' => 'BMI', 'value' => '[BMI]', 'unit' => ''],
+            ['label' => 'Blood pressure',          'value' => '[120/80]', 'unit' => 'mmHg'],
+            ['label' => 'Temperature',             'value' => '[#]',      'unit' => '°C'],
+            ['label' => 'Oxygen saturation',       'value' => '[#]',      'unit' => '%'],
+            ['label' => 'Respiratory rate',        'value' => '[#]',      'unit' => '/min'],
+            ['label' => 'Pulse rate',              'value' => '[#]',      'unit' => 'bpm'],
+            ['label' => 'CBG (capillary glucose)', 'value' => '[#]',      'unit' => 'mg/dL'],
         ],
         'medications' => ['[Medicine name]', '[Medicine name]'],
         ],
@@ -51,6 +52,7 @@ Route::get('/resident/home', function () {
 });
 
 // DASHBOARD ROUTE (TEMPORARY PAGE)
+
 Route::get('/bhw/dashboard', function () {
     return view('bhw.dashboard', [
         'bhw' => ['name' => '[BHW Name]', 'barangay' => '[Barangay name]'],
@@ -70,6 +72,7 @@ Route::get('/bhw/dashboard', function () {
 });
 
 // RESIDENT REFERRALS
+
 Route::get('/resident/referrals', function (Request $request) {
     $assignments = [
         ['status' => 'Current', 'name' => '[BHW name]', 'barangay' => '[Barangay]', 'period' => '[Start date] to present'],
@@ -90,6 +93,7 @@ Route::get('/resident/referrals', function (Request $request) {
 });
 
 // BHW PROFILE
+
 Route::get('/resident/profile', function () {
     return view('resident.profile', [
         'resident' => [
@@ -104,6 +108,7 @@ Route::get('/resident/profile', function () {
 });
 
 // BHW REFERRALS
+
 Route::get('/bhw/referrals', function (Request $request) {
     $referrals = [
         ['status' => 'Pending', 'resident' => '[Resident name]', 'facility' => '[Facility name]', 'reason' => '[Reason]', 'date' => '[Date]'],
@@ -124,6 +129,7 @@ Route::get('/bhw/referrals', function (Request $request) {
 });
 
 // BHW PROFILE
+
 Route::get('/bhw/profile', function () {
     return view('bhw.profile', [
         'bhw' => [
@@ -138,6 +144,7 @@ Route::get('/bhw/profile', function () {
 });
 
 // EDIT BHW RECORDS
+
 Route::get('/bhw/records/{id}/edit', function ($id) {
     return view('bhw.record-edit', [
         'id' => $id,
@@ -151,12 +158,13 @@ Route::get('/bhw/records/{id}/edit', function ($id) {
 });
 
 // EVENT FORM
+
 Route::post('/bhw/records/{id}', function ($id) {
     return back()->with('status', 'Changes saved (demo only, nothing is stored yet).');
 });
 
 Route::get('/bhw/events/create', function () {
-    return view('bhw.event-form');
+    return view('bhw.event-form', ['event' => null]);
 });
 
 Route::post('/bhw/events', function (Request $request) {
@@ -172,4 +180,42 @@ Route::post('/bhw/events', function (Request $request) {
     return redirect('/bhw/dashboard')->with('status', 'Posted (demo only, nothing is stored yet).');
 });
 
-//
+// EDIT EVENT
+
+Route::get('/bhw/events/{id}/edit', function ($id) {
+    return view('bhw.event-form', [
+        'event' => [
+            'id' => $id,
+            'type' => 'Event',
+            'title' => '[Event title]',
+            'date' => '2026-10-20',   // date and time inputs only accept real values
+            'time' => '09:00',
+            'venue' => '[Venue]',
+            'description' => '[What residents should know]',
+        ],
+    ]);
+});
+
+Route::put('/bhw/events/{id}', function (Request $request, $id) {
+    $request->validate([
+        'type' => 'required|in:Event,Announcement',
+        'title' => 'required|string|max:100',
+        'date' => 'required_if:type,Event|nullable|date',
+        'time' => 'required_if:type,Event|nullable',
+        'venue' => 'required_if:type,Event|nullable|string|max:100',
+        'description' => 'nullable|string|max:1000',
+    ]);
+
+    return redirect('/bhw/dashboard')->with('status', 'Changes saved (demo only, nothing is stored yet).');
+});
+
+//EDIT ADDRESS/BARANGAY
+Route::post('/bhw/records/{id}/move', function (Request $request, $id) {
+    $request->validate([
+        'barangay_id' => 'required',
+        'moved_on' => 'required|date|before_or_equal:today',
+        'address' => 'required|string|max:255',
+    ]);
+
+    return redirect('/bhw/dashboard')->with('status', 'Resident moved to the new barangay (demo only, nothing is stored yet).');
+});

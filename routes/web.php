@@ -9,10 +9,20 @@ Route::get('/', function () {
 });
 
 //self explanatory. a directory translator. kung baga tinatanggal lang yung back slash.
-Route::view('/dashboard', 'dashboard');
-Route::view('/login', 'login');
-Route::view('/register', 'register');
-Route::view('/register/step-2', 'register-step2');
+use App\Http\Controllers\AuthController;
+
+Route::redirect('/', '/login');
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/register', [AuthController::class, 'showStep1']);
+    Route::post('/register', [AuthController::class, 'storeStep1']);
+    Route::get('/register/step-2', [AuthController::class, 'showStep2']);
+    Route::post('/register/step-2', [AuthController::class, 'storeStep2']);
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 // RESIDENT HOME PAGE
 

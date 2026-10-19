@@ -12,6 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         //
+        $middleware->redirectUsersTo(fn () => auth()->user()?->role === 'bhw' ? '/bhw/dashboard' : '/resident/home');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

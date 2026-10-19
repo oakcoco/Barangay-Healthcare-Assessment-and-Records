@@ -1,3 +1,9 @@
+## FUTURE TECH STACK
+The stack I'd use is Laravel as an API (with Sanctum for login tokens), MySQL on the server, and a React Native app built with Expo, with a local SQLite copy of the data on the phone. For offline use, the BHW taps "Download my residents" while online. The app saves those profiles in SQLite, and anything entered offline goes into a local queue. When the internet returns, the app sends the queue to Laravel. Android and iOS both come from the one React Native codebase. Android is easy to test. On iOS you can test for free through the Expo Go app, but releasing it needs an Apple Developer account at about $99 a year, so treat iOS as optional for the timeframe. The database is MySQL, which is the schema you have now, plus SQLite on each phone. Laravel is a good choice, but "Laravel and React" means React Native for a mobile app, not the web version of React. React Native suits you because you already know JavaScript. Flutter is the main alternative, but it means learning Dart.
+
+Two things in the current project won't carry over. Your Blade pages are server-rendered, so they can't work offline. They become the design reference, and the mobile app is a new front end that talks to a Laravel API. Also, the schema I wrote uses auto-increment IDs, which collide when two phones create records offline. Add a `uuid` column (a unique ID the phone creates itself) to every table that can be filled offline, such as vital signs, medications, scores, and photos. Build it in three stages: the online app first, then offline download, then offline entry with sync, which is the hardest part. Do you want me to write the SQL that adds those `uuid` columns to your schema?
+
+
  <div class="rounded-xl bg-white p-4 shadow">IT DEPENDS WHAT ACCOUNT IS SIGNED IN. 
         <br><br>TEMPORARY UI PAGE.
         <br><br> PLEASE CONFIGURE THE LINK TO NAVIGATE IN PAGE

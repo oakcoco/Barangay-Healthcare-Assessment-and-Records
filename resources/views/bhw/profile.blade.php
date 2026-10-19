@@ -33,9 +33,10 @@
             @endforeach
         </div>
 
-        <a href="/login" class="mx-5 mt-5 flex h-11 items-center justify-center rounded-[10px] border border-[#C80000] bg-white text-sm font-medium text-[#C80000]">
-            Log out
-        </a>
+        <form method="POST" action="/logout" class="mx-5 mt-5">
+            @csrf
+            <button type="submit" class="flex h-11 w-full items-center justify-center rounded-[10px] border border-[#C80000] bg-white text-sm font-medium text-[#C80000]">Log out</button>
+        </form>
 
         <nav class="fixed bottom-0 left-1/2 flex w-full max-w-md -translate-x-1/2 border-t border-gray-300 bg-white py-2 text-[11px]">
             <a href="/bhw/dashboard" class="flex flex-1 flex-col items-center gap-0.5 text-gray-600">

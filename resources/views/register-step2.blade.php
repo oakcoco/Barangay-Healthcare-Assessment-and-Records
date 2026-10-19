@@ -30,29 +30,38 @@
                 <span class="h-1.5 flex-1 rounded-full bg-white"></span>
             </div>
 
-            <label class="mb-2 block text-sm font-semibold">Phone Number:</label>
-            <input type="tel" class="mb-4 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+            @if ($errors->any())
+                <div class="mb-4 rounded-lg bg-white px-3 py-2 text-xs text-[#A00000]">
+                    @foreach ($errors->all() as $e)<p>{{ $e }}</p>@endforeach
+                </div>
+            @endif
 
-            <label class="mb-2 block text-sm font-semibold">Email(optional):</label>
-            <input type="email" class="mb-4 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+            <form method="POST" action="/register/step-2">
+                @csrf
+                <label class="mb-2 block text-sm font-semibold">Phone Number:</label>
+                <input name="phone" type="tel" value="{{ old('phone') }}" required class="mb-4 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
 
-            <label class="mb-2 block text-sm font-semibold">Password:</label>
-            <div class="relative mb-4">
-                <input id="pw1" type="password" class="w-full rounded-lg bg-[#D9D9D9] px-4 py-3 pr-12 text-sm text-black focus:outline-none">
-                <button type="button" onclick="togglePw('pw1')" aria-label="Show or hide password" class="absolute right-3 top-1/2 -translate-y-1/2 text-black">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-            </div>
+                <label class="mb-2 block text-sm font-semibold">Email(optional):</label>
+                <input name="email" type="email" value="{{ old('email') }}" class="mb-4 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
 
-            <label class="mb-2 block text-sm font-semibold">Confirm Password:</label>
-            <div class="relative mb-8">
-                <input id="pw2" type="password" class="w-full rounded-lg bg-[#D9D9D9] px-4 py-3 pr-12 text-sm text-black focus:outline-none">
-                <button type="button" onclick="togglePw('pw2')" aria-label="Show or hide password" class="absolute right-3 top-1/2 -translate-y-1/2 text-black">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-            </div>
+                <label class="mb-2 block text-sm font-semibold">Password:</label>
+                <div class="relative mb-4">
+                    <input id="pw1" name="password" type="password" required class="w-full rounded-lg bg-[#D9D9D9] px-4 py-3 pr-12 text-sm text-black focus:outline-none">
+                    <button type="button" onclick="togglePw('pw1')" aria-label="Show or hide password" class="absolute right-3 top-1/2 -translate-y-1/2 text-black">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
 
-            <a href="/login" class="mx-auto block w-3/5 rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold">Sign Up</a>
+                <label class="mb-2 block text-sm font-semibold">Confirm Password:</label>
+                <div class="relative mb-8">
+                    <input id="pw2" name="password_confirmation" type="password" required class="w-full rounded-lg bg-[#D9D9D9] px-4 py-3 pr-12 text-sm text-black focus:outline-none">
+                    <button type="button" onclick="togglePw('pw2')" aria-label="Show or hide password" class="absolute right-3 top-1/2 -translate-y-1/2 text-black">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
+
+                <button type="submit" class="mx-auto block w-3/5 rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold">Sign Up</button>
+            </form>
 
             <p class="mt-8 text-center text-xs text-red-200">Already have an account? <a href="/login" class="underline">Click Here to Sign in</a></p>
         </div>

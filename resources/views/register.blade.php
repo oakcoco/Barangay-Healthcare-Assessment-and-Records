@@ -30,29 +30,39 @@
                 <span class="h-1.5 flex-1 rounded-full bg-[#E86B6B]"></span>
             </div>
 
-            <label class="mb-2 block text-sm font-semibold">Full Name:</label>
-            <input type="text" class="mb-5 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+            @if ($errors->any())
+                <div class="mb-4 rounded-lg bg-white px-3 py-2 text-xs text-[#A00000]">
+                    @foreach ($errors->all() as $e)<p>{{ $e }}</p>@endforeach
+                </div>
+            @endif
 
-            <label class="mb-2 block text-sm font-semibold">Barangay:</label>
-            <select class="mb-5 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
-                <option>Select barangay</option>
-                <option>[Barangay 1]</option>
-                <option>[Barangay 2]</option>
-            </select>
+            <form method="POST" action="/register">
+                @csrf
+                <label class="mb-2 block text-sm font-semibold">Full Name:</label>
+                <input name="full_name" type="text" value="{{ old('full_name') }}" required class="mb-5 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
 
-            <p class="mb-2 text-sm font-semibold">Role:</p>
-            <div class="mb-8 grid grid-cols-2 gap-3">
-                <label class="cursor-pointer">
-                    <input type="radio" name="role" value="resident" checked class="peer sr-only">
-                    <span class="block rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold opacity-70 peer-checked:opacity-100 peer-checked:ring-2 peer-checked:ring-white">Resident</span>
-                </label>
-                <label class="cursor-pointer">
-                    <input type="radio" name="role" value="bhw" class="peer sr-only">
-                    <span class="block rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold opacity-70 peer-checked:opacity-100 peer-checked:ring-2 peer-checked:ring-white">Healthcare Worker</span>
-                </label>
-            </div>
+                <label class="mb-2 block text-sm font-semibold">Barangay:</label>
+                <select name="barangay_id" required class="mb-5 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+                    <option value="" disabled @selected(! old('barangay_id'))>Select barangay</option>
+                    @foreach ($barangays as $b)
+                        <option value="{{ $b->id }}" @selected(old('barangay_id') == $b->id)>{{ $b->name }}</option>
+                    @endforeach
+                </select>
 
-            <a href="/register/step-2" class="mx-auto block w-fit rounded-lg bg-[#D9D9D9] px-10 py-2.5 text-sm text-black">Next Step &rarr;</a>
+                <p class="mb-2 text-sm font-semibold">Role:</p>
+                <div class="mb-8 grid grid-cols-2 gap-3">
+                    <label class="cursor-pointer">
+                        <input type="radio" name="role" value="resident" class="peer sr-only" @checked(old('role', 'resident') === 'resident')>
+                        <span class="block rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold opacity-70 peer-checked:opacity-100 peer-checked:ring-2 peer-checked:ring-white">Resident</span>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="role" value="bhw" class="peer sr-only" @checked(old('role') === 'bhw')>
+                        <span class="block rounded-lg bg-[#6F9A2E] py-3 text-center text-sm font-semibold opacity-70 peer-checked:opacity-100 peer-checked:ring-2 peer-checked:ring-white">Healthcare Worker</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="mx-auto block w-fit rounded-lg bg-[#D9D9D9] px-10 py-2.5 text-sm text-black">Next Step &rarr;</button>
+            </form>
 
             <p class="mt-8 text-center text-xs text-red-200">Already have an account? <a href="/login" class="underline">Click Here to Sign in</a></p>
         </div>

@@ -16,7 +16,7 @@ class AuthController extends Controller
 {
     public function showLogin()
     {
-        return view('login');
+        return response()->view('login')->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     public function login(Request $request)
@@ -56,7 +56,9 @@ class AuthController extends Controller
 
     public function showStep1()
     {
-        return view('register', ['barangays' => Barangay::orderBy('name')->get()]);
+        return response()
+            ->view('register', ['barangays' => Barangay::orderBy('name')->get()])
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     public function storeStep1(Request $request)
@@ -74,11 +76,11 @@ class AuthController extends Controller
 
     public function showStep2(Request $request)
     {
-        if (! $request->session()->has('register')) {
+            if (! $request->session()->has('register')) {
             return redirect('/register');
         }
 
-        return view('register-step2');
+        return response()->view('register-step2')->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     public function storeStep2(Request $request)

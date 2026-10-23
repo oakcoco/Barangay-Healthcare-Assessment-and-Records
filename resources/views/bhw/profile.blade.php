@@ -42,7 +42,7 @@
             <a href="/bhw/dashboard" class="flex flex-1 flex-col items-center gap-0.5 text-gray-600">
                 <x-heroicon-o-home class="h-6 w-6" /> Home
             </a>
-            <a href="/bhw/referrals" class="flex flex-1 flex-col items-center gap-0.5 text-gray-600">
+            <a href="/bhw/residents" class="flex flex-1 flex-col items-center gap-0.5 text-gray-600">
                 <x-heroicon-o-clipboard-document-list class="h-6 w-6" /> Records
             </a>
             <a href="/bhw/profile" class="flex flex-1 flex-col items-center gap-0.5 font-semibold text-[#C80000]">

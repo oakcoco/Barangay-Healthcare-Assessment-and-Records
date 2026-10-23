@@ -17,7 +17,7 @@
 
         <header class="mb-4 bg-[#C80000] px-5 pb-5 pt-12 text-white" style="border-radius: 0 0 24px 24px;">
             <div class="flex items-center gap-2">
-                <a href="/bhw/referrals" aria-label="Back"><x-heroicon-o-chevron-left class="h-6 w-6" /></a>
+                <a href="/bhw/residents" aria-label="Back"><x-heroicon-o-chevron-left class="h-6 w-6" /></a>
                 <h1 class="text-[22px] font-semibold">Edit record</h1>
             </div>
             <div class="mt-4 flex items-center gap-3.5">
@@ -37,8 +37,12 @@
             </div>
         </header>
 
-        @if (session('status'))
-            <div class="mx-5 mb-4 rounded-xl bg-[#E9F0DD] px-4 py-3 text-sm text-[#3B5E14]">{{ session('status') }}</div>
+        @if ($errors->any())
+            <div class="mx-5 mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-[#A00000]">
+                @foreach ($errors->all() as $error)
+                    <p>{{ $error }}</p>
+                @endforeach
+            </div>
         @endif
 
         <form method="POST" action="/bhw/records/{{ $id }}" enctype="multipart/form-data">
@@ -193,7 +197,7 @@
             </section>
 
             <div class="fixed bottom-0 left-1/2 flex w-full max-w-md -translate-x-1/2 gap-3 border-t border-[#E8E2D8] bg-white px-5 py-4">
-                <a href="/bhw/referrals" class="flex h-12 flex-1 items-center justify-center rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</a>
+                <a href="/bhw/residents" class="flex h-12 flex-1 items-center justify-center rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</a>
                 <button type="submit" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Save changes</button>
             </div>
                 <input type="file" id="photoInput" name="profile_photo" accept="image/*" class="hidden">
@@ -343,8 +347,7 @@
             {{-- Address/Barangay --}}
 
                 <div id="moveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
-            <form method="POST" action="/bhw/records/{{ $id }}/move"
-                onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
+                <form method="POST" action="/bhw/records/{{ $id }}/move" onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
                 class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
                 @csrf
                 <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>

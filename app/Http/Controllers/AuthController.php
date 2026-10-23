@@ -31,9 +31,10 @@ class AuthController extends Controller
         $field = $isEmail ? 'email' : 'phone';
         $value = $isEmail ? $data['login'] : preg_replace('/[\s\-]/', '', $data['login']);
 
-        if (! Auth::attempt([$field => $value, 'password' => $data['password']])) {
+        if (! Auth::attempt([$field => $value, 'password' => $data['password']], $request->boolean('remember'))) {
             throw ValidationException::withMessages(['login' => 'Wrong email/phone number or password.']);
         }
+        
 
         $user = Auth::user();
 

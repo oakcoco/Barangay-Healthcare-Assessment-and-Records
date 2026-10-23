@@ -37,7 +37,10 @@
 
                 <label class="mb-2 block text-sm font-semibold">Password:</label>
                 <input name="password" type="password" required class="mb-10 w-full rounded-lg border border-black bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
-
+                <label class="mb-8 flex items-center gap-2 text-xs">
+                    <input type="checkbox" name="remember" value="1" class="h-4 w-4 accent-[#6F9A2E]" @checked(old('remember'))>
+                    Remember me
+                </label>
                 <button type="submit" class="mx-auto block w-4/5 rounded-lg border border-black bg-[#6F9A2E] py-3 text-center text-sm font-semibold">Log In</button>
             </form>
 

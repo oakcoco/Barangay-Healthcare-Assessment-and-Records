@@ -87,6 +87,56 @@ Route::middleware(['auth', 'role'])->group(function () {
             ],
         ]);
     });
+    // RESIDENT REFERRALS (history of assigned BHWs, real data)
+    Route::get('/resident/referrals', function (Request $request) {
+        $resident = $request->user()->resident;
+        abort_unless($resident, 403, 'No resident record is linked to this account.');
+
+        $assignments = DB::table('bhw_assignments as a')
+            ->join('users as u', 'u.id', '=', 'a.bhw_user_id')
+            ->leftJoin('bhw_profiles as p', 'p.user_id', '=', 'u.id')
+            ->leftJoin('barangays as b', 'b.id', '=', 'p.barangay_id')
+            ->where('a.resident_id', $resident->id)
+            ->orderByDesc('a.assigned_on')
+            ->select('a.assigned_on', 'a.ended_on', 'u.name', 'b.name as barangay')
+            ->get()
+            ->map(fn ($r) => [
+                'status' => $r->ended_on ? 'Past' : 'Current',
+                'name' => $r->name,
+                'barangay' => $r->barangay ?? '—',
+                'period' => Carbon::parse($r->assigned_on)->format('M j, Y').' to '
+                    .($r->ended_on ? Carbon::parse($r->ended_on)->format('M j, Y') : 'present'),
+            ])->all();
+
+        $filter = $request->query('status', 'All');
+        if ($filter !== 'All') {
+            $assignments = array_filter($assignments, fn ($a) => $a['status'] === $filter);
+        }
+
+        return view('resident.referrals', [
+            'assignments' => $assignments,
+            'filter' => $filter,
+            'filters' => ['All', 'Current', 'Past'],
+        ]);
+    });
+
+    // RESIDENT PROFILE (real data)
+    Route::get('/resident/profile', function (Request $request) {
+        $user = $request->user();
+        $resident = $user->resident()->with('barangay')->first();
+        abort_unless($resident, 403, 'No resident record is linked to this account.');
+
+        return view('resident.profile', [
+            'resident' => [
+                'name' => $resident->full_name,
+                'id' => $resident->resident_no ?? '—',
+                'barangay' => $resident->barangay->name,
+                'purok' => $resident->purok ?? '—',
+                'phone' => $resident->phone ?? $user->phone,
+                'email' => $resident->email ?? $user->email ?? '—',
+            ],
+        ]);
+    });
 
     // BHW DASHBOARD (real data)
     Route::get('/bhw/dashboard', function (Request $request) {
@@ -209,7 +259,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                 'id' => $r->id,
                 'name' => $r->full_name,
                 'no' => $r->resident_no ?? '—',
-                'age' => $r->birthdate ? Carbon::parse($r->birthdate)->age.' yrs' : '—',
+                'age' => $r->birthdate ? Carbon::parse($r->birthdate)->age.' Years Old' : '—',
                 'last' => $r->last_vitals ? Carbon::parse($r->last_vitals)->format('M j, Y') : 'No readings yet',
             ])->all();
 
@@ -224,14 +274,21 @@ Route::middleware(['auth', 'role'])->group(function () {
             ->join('bhw_assignments as a', function ($j) use ($user) {
                 $j->on('a.resident_id', '=', 'r.id')->where('a.bhw_user_id', $user->id)->whereNull('a.ended_on');
             })
+            ->join('barangays as b', 'b.id', '=', 'r.barangay_id')
             ->where('r.id', $id)->whereNull('r.deleted_at')
-            ->select('r.id', 'r.full_name', 'r.resident_no')->first();
-        abort_unless($resident, 404);
+            ->select('r.*', 'b.name as barangay_name')->first();
+
+
+
+        
+        $address = DB::table('resident_residences')
+            ->where('resident_id', $resident->id)->whereNull('moved_out_on')->value('address');
 
         $medications = DB::table('medications')
             ->where('resident_id', $resident->id)->where('is_active', 1)->whereNull('deleted_at')
             ->orderBy('name')->get()
             ->map(fn ($m) => [
+                'id' => $m->id,
                 'name' => $m->name,
                 'detail' => rtrim(rtrim(number_format($m->dose, 2, '.', ''), '0'), '.').' '.$m->dose_unit
                     .' · '.str_replace('_', ' ', $m->frequency),
@@ -239,9 +296,23 @@ Route::middleware(['auth', 'role'])->group(function () {
 
         return view('bhw.record-edit', [
             'id' => $resident->id,
-            'resident' => ['name' => $resident->full_name, 'id' => $resident->resident_no ?? '—'],
+            'resident' => [
+                'name' => $resident->full_name,
+                'id' => $resident->resident_no ?? '—',
+                'barangay' => $resident->barangay_name,
+            ],
+                'barangays' => DB::table('barangays')->where('id', '!=', $resident->barangay_id)->orderBy('name')->get(),
+                'profile' => [
+                'full_name' => $resident->full_name,
+                'birthdate' => $resident->birthdate,    
+                'sex' => $resident->sex,
+                'phone' => $resident->phone,
+                'address' => $address,
+            ],
             'medications' => $medications,
+            
             'photoCount' => DB::table('record_photos')->where('resident_id', $resident->id)->whereNull('deleted_at')->count(),
+            
         ]);
     });
 
@@ -283,20 +354,27 @@ Route::middleware(['auth', 'role'])->group(function () {
         ]);
     });
 
-    // SAVE RECORD: vital signs and medications (the other sections are not stored yet)
+    // SAVE RECORD: citizen profile, vital signs and medications (other sections are not stored yet)
     Route::post('/bhw/records/{id}', function (Request $request, $id) {
-    $user = $request->user();
+        $user = $request->user();
 
-        // Only a BHW currently assigned to this resident may save
         $resident = DB::table('residents as r')
             ->join('bhw_assignments as a', function ($j) use ($user) {
                 $j->on('a.resident_id', '=', 'r.id')->where('a.bhw_user_id', $user->id)->whereNull('a.ended_on');
             })
             ->where('r.id', $id)->whereNull('r.deleted_at')
-            ->select('r.id')->first();
+            ->select('r.*')->first();
         abort_unless($resident, 404);
 
+        // Phone numbers: ignore spaces and dashes
+        $request->merge(['contact' => preg_replace('/[\s\-]/', '', (string) $request->input('contact'))]);
+
         $data = $request->validate([
+            'full_name' => 'required|string|max:255',
+            'birthdate' => 'nullable|date|before_or_equal:today',
+            'sex' => 'nullable|in:female,male',
+            'contact' => ['nullable', 'regex:/^(09\d{9}|\+639\d{9})$/'],
+            'address' => 'nullable|string|max:255',
             'bp' => ['nullable', 'regex:/^\d{2,3}\/\d{2,3}$/'],
             'temp' => 'nullable|numeric|between:30,45',
             'spo2' => 'nullable|integer|between:0,100',
@@ -311,6 +389,9 @@ Route::middleware(['auth', 'role'])->group(function () {
             'medications.*.start_date' => 'nullable|date',
             'medications.*.active' => 'nullable|in:0,1',
         ], [
+            'full_name.required' => 'The resident needs a full name.',
+            'birthdate.before_or_equal' => 'Birthdate cannot be in the future.',
+            'contact.regex' => 'Enter a valid mobile number, Must be 11 numbers and starts with "09".',
             'bp.regex' => 'Blood pressure must look like 120/80.',
             'temp.between' => 'Temperature must be between 30 and 45 °C.',
             'spo2.between' => 'Oxygen saturation must be between 0 and 100 %.',
@@ -328,6 +409,27 @@ Route::middleware(['auth', 'role'])->group(function () {
             }
         }
 
+        // --- Citizen profile: did anything actually change? ---
+        $newProfile = [
+            'full_name' => trim($data['full_name']),
+            'birthdate' => $data['birthdate'] ?? null,
+            'sex' => $data['sex'] ?? null,
+            'phone' => ($data['contact'] ?? '') !== '' ? $data['contact'] : null,
+        ];
+        $oldProfile = [
+            'full_name' => $resident->full_name,
+            'birthdate' => $resident->birthdate,
+            'sex' => $resident->sex,
+            'phone' => $resident->phone,
+        ];
+        $profileChanged = $newProfile != $oldProfile;
+
+        $currentResidence = DB::table('resident_residences')
+            ->where('resident_id', $resident->id)->whereNull('moved_out_on')->first();
+        $newAddress = ($data['address'] ?? '') !== '' ? trim($data['address']) : null;
+        $addressChanged = ($currentResidence->address ?? null) != $newAddress;
+
+        // --- Vital signs and medications ---
         $readings = [
             'temperature_c' => $data['temp'] ?? null,
             'spo2_percent' => $data['spo2'] ?? null,
@@ -338,11 +440,47 @@ Route::middleware(['auth', 'role'])->group(function () {
         $hasVitals = $sys !== null || count(array_filter($readings, fn ($v) => $v !== null)) > 0;
         $meds = $data['medications'] ?? [];
 
-        if (! $hasVitals && ! $meds) {
-            return back()->with('status', 'Nothing new to save. Only vital signs and medications are stored for now.');
+        if ($hasVitals) {
+            $dupe = DB::table('vital_signs')
+                ->where('resident_id', $resident->id)->where('recorded_by', $user->id)
+                ->where('recorded_at', '>=', now()->subMinutes(2))
+                ->where('bp_systolic', $sys)->where('bp_diastolic', $dia)
+                ->where('temperature_c', $readings['temperature_c'])
+                ->where('spo2_percent', $readings['spo2_percent'])
+                ->where('respiratory_rate', $readings['respiratory_rate'])
+                ->where('pulse_bpm', $readings['pulse_bpm'])
+                ->where('cbg_mgdl', $readings['cbg_mgdl'])
+                ->exists();
+
+            if ($dupe) {
+                $hasVitals = false;
+            }
         }
 
-        DB::transaction(function () use ($hasVitals, $sys, $dia, $readings, $meds, $resident, $user) {
+        if (! $hasVitals && ! $meds && ! $profileChanged && ! $addressChanged) {
+            return back()->with('status', 'Nothing new to save. Only the citizen profile, vital signs and medications are stored for now.');
+        }
+
+        DB::transaction(function () use ($hasVitals, $sys, $dia, $readings, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress) {
+            if ($profileChanged) {
+                DB::table('residents')->where('id', $resident->id)->update($newProfile + ['updated_at' => now()]);
+            }
+
+            if ($addressChanged) {
+                if ($currentResidence) {
+                    DB::table('resident_residences')->where('id', $currentResidence->id)->update(['address' => $newAddress]);
+                } else {
+                    DB::table('resident_residences')->insert([
+                        'resident_id' => $resident->id,
+                        'barangay_id' => $resident->barangay_id,
+                        'address' => $newAddress,
+                        'moved_in_on' => today()->toDateString(),
+                        'recorded_by' => $user->id,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+
             if ($hasVitals) {
                 DB::table('vital_signs')->insert(array_merge($readings, [
                     'resident_id' => $resident->id,
@@ -371,11 +509,12 @@ Route::middleware(['auth', 'role'])->group(function () {
         });
 
         $saved = array_filter([
+            ($profileChanged || $addressChanged) ? 'citizen profile' : null,
             $hasVitals ? 'vital signs' : null,
             $meds ? count($meds).' medication'.(count($meds) > 1 ? 's' : '') : null,
         ]);
 
-    return back()->with('status', 'Saved: '.implode(' and ', $saved).'.');
+        return redirect('/bhw/residents')->with('status', 'Saved for '.$resident->full_name.': '.implode(', ', $saved).'.');
     });
 
     // POST EVENT FORM
@@ -478,15 +617,89 @@ Route::middleware(['auth', 'role'])->group(function () {
     });
 
 
-    // CHANGE ADDRESS or BARANGAY
+   // CHANGE BARANGAY: a move keeps the old address as history and ends the BHW assignment
     Route::post('/bhw/records/{id}/move', function (Request $request, $id) {
-        $request->validate([
-            'barangay_id' => 'required',
+        $user = $request->user();
+
+        $resident = DB::table('residents as r')
+            ->join('bhw_assignments as a', function ($j) use ($user) {
+                $j->on('a.resident_id', '=', 'r.id')->where('a.bhw_user_id', $user->id)->whereNull('a.ended_on');
+            })
+            ->where('r.id', $id)->whereNull('r.deleted_at')
+            ->select('r.*')->first();
+        abort_unless($resident, 404);
+
+        $data = $request->validate([
+            'barangay_id' => 'required|exists:barangays,id|not_in:'.$resident->barangay_id,
             'moved_on' => 'required|date|before_or_equal:today',
             'address' => 'required|string|max:255',
+        ], [
+            'barangay_id.required' => 'Choose the new barangay.',
+            'barangay_id.not_in' => 'The resident already lives in that barangay.',
+            'moved_on.before_or_equal' => 'The move date cannot be in the future.',
         ]);
 
-        return redirect('/bhw/dashboard')->with('status', 'Resident moved to the new barangay (demo only, nothing is stored yet).');
+        $current = DB::table('resident_residences')
+            ->where('resident_id', $resident->id)->whereNull('moved_out_on')->first();
+
+        if ($current && $data['moved_on'] < $current->moved_in_on) {
+            return back()->withErrors([
+                'moved_on' => 'The move date cannot be before they moved into their current address ('
+                    .Carbon::parse($current->moved_in_on)->format('M j, Y').').',
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $resident, $current, $user) {
+            // 1. close the old address first (only one open row is allowed per resident)
+            if ($current) {
+                DB::table('resident_residences')->where('id', $current->id)
+                    ->update(['moved_out_on' => $data['moved_on']]);
+            }
+
+            // 2. open the new one
+            DB::table('resident_residences')->insert([
+                'resident_id' => $resident->id,
+                'barangay_id' => $data['barangay_id'],
+                'address' => trim($data['address']),
+                'moved_in_on' => $data['moved_on'],
+                'recorded_by' => $user->id,
+                'created_at' => now(),
+            ]);
+
+            // 3. the resident now belongs to the new barangay (the old purok no longer applies)
+            DB::table('residents')->where('id', $resident->id)->update([
+                'barangay_id' => $data['barangay_id'],
+                'purok' => null,
+                'updated_at' => now(),
+            ]);
+
+            // 4. end this BHW's assignment (never earlier than the day it started)
+            DB::update(
+                'UPDATE bhw_assignments SET ended_on = GREATEST(assigned_on, ?), updated_at = ? WHERE resident_id = ? AND ended_on IS NULL',
+                [$data['moved_on'], now(), $resident->id]
+            );
+        });
+
+        $barangay = DB::table('barangays')->where('id', $data['barangay_id'])->value('name');
+
+        return redirect('/bhw/residents')
+            ->with('status', $resident->full_name.' moved to '.$barangay.'. They are no longer on your list.');
+    });
+    
+    // REMOVE A MEDICATION ADDED BY MISTAKE (hidden, not erased)
+    Route::delete('/bhw/records/{id}/medications/{med}', function (Request $request, $id, $med) {
+        $user = $request->user();
+
+        $allowed = DB::table('bhw_assignments')
+            ->where('resident_id', $id)->where('bhw_user_id', $user->id)->whereNull('ended_on')->exists();
+        abort_unless($allowed, 404);
+
+        $removed = DB::table('medications')
+            ->where('id', $med)->where('resident_id', $id)->whereNull('deleted_at')
+            ->update(['deleted_at' => now(), 'updated_at' => now()]);
+        abort_unless($removed, 404);
+
+        return redirect("/bhw/records/{$id}/edit")->with('status', 'Medication removed.');
     });
 
 });

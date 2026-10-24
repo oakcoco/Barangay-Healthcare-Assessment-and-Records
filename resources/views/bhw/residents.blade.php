@@ -14,6 +14,11 @@
             <h1 class="text-[22px] font-semibold">Residents</h1>
             <p class="mt-1 text-[13px] text-red-100">Residents assigned to you</p>
         </header>
+        
+        {{-- confirmation message --}}
+        @if (session('status'))
+            <div class="mx-5 mt-4 rounded-xl bg-[#E9F0DD] px-4 py-3 text-sm text-[#3B5E14]">{{ session('status') }}</div>
+        @endif
 
         <form method="GET" action="/bhw/residents" class="flex gap-2 px-5 py-4">
             <input name="q" type="text" value="{{ $q }}" placeholder="Search by name"

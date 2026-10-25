@@ -17,7 +17,7 @@
 
         <header class="mb-4 bg-[#C80000] px-5 pb-5 pt-12 text-white" style="border-radius: 0 0 24px 24px;">
             <div class="flex items-center gap-2">
-                <a href="/bhw/referrals" aria-label="Back"><x-heroicon-o-chevron-left class="h-6 w-6" /></a>
+                <a href="/bhw/residents" aria-label="Back"><x-heroicon-o-chevron-left class="h-6 w-6" /></a>
                 <h1 class="text-[22px] font-semibold">Edit record</h1>
             </div>
             <div class="mt-4 flex items-center gap-3.5">
@@ -36,12 +36,19 @@
                 </div>
             </div>
         </header>
-
         @if (session('status'))
             <div class="mx-5 mb-4 rounded-xl bg-[#E9F0DD] px-4 py-3 text-sm text-[#3B5E14]">{{ session('status') }}</div>
         @endif
 
-        <form method="POST" action="/bhw/records/{{ $id }}" enctype="multipart/form-data">
+        @if ($errors->any())
+            <div class="mx-5 mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-[#A00000]">
+                @foreach ($errors->all() as $error)
+                    <p>{{ $error }}</p>
+                @endforeach
+            </div>
+        @endif
+
+        <form id="recordForm" method="POST" action="/bhw/records/{{ $id }}" enctype="multipart/form-data">
             @csrf
 
             {{-- Citizen profile --}}
@@ -50,30 +57,34 @@
                 <p class="mb-3 text-xs text-gray-600">Personal details</p>
 
                 <label class="{{ $label }}">Full name</label>
-                <input name="full_name" type="text" placeholder="[Full name]" class="{{ $input }} mb-3">
+                <input name="full_name" type="text" value="{{ old('full_name', $profile['full_name']) }}" placeholder="[Full name]" required class="{{ $input }} mb-3">
 
                 <div class="mb-3 grid grid-cols-2 gap-3">
                     <div>
                         <label class="{{ $label }}">Birthdate</label>
-                        <input name="birthdate" type="date" max="{{ now()->toDateString() }}" class="{{ $input }}">
+                        <input name="birthdate" type="date" value="{{ old('birthdate', $profile['birthdate']) }}" max="{{ now()->toDateString() }}" class="{{ $input }}">
                     </div>
                     <div>
                         <label class="{{ $label }}">Sex</label>
                         <select name="sex" class="{{ $input }}">
-                            <option value="" disabled selected>[Select]</option>
-                            <option>Female</option>
-                            <option>Male</option>
+                            <option value="" @selected(! old('sex', $profile['sex']))>[Select]</option>
+                            <option value="female" @selected(old('sex', $profile['sex']) === 'female')>Female</option>
+                            <option value="male" @selected(old('sex', $profile['sex']) === 'male')>Male</option>
                         </select>
                     </div>
                 </div>
+
+                <label class="{{ $label }}">Address</label>
+                <input name="address" type="text" value="{{ old('address', $profile['address']) }}" placeholder="[House no., street]" class="{{ $input }} mb-3">
+
                 <label class="{{ $label }}">Barangay</label>
                 <div class="mb-3 flex h-11 items-center justify-between rounded-[10px] border border-[#CFC8BA] bg-[#F6F4F0] px-3 text-sm">
-                    <span>{{ $resident['barangay'] ?? '[Barangay name]' }}</span>
+                    <span>{{ $resident['barangay'] }}</span>
                     <button type="button" id="openMove" class="text-[13px] font-medium text-[#3B5E14]">Change</button>
                 </div>
 
                 <label class="{{ $label }}">Contact number</label>
-                <input name="contact" type="tel" placeholder="[Phone number]" class="{{ $input }}">
+                <input name="contact" type="tel" value="{{ old('contact', $profile['phone']) }}" placeholder="[Phone number]" class="{{ $input }}">
             </section>
 
             {{-- Socioeconomic and social services --}}
@@ -169,7 +180,7 @@
                             <p class="text-sm font-medium">{{ $m['name'] }}</p>
                             <p class="text-xs text-gray-600">{{ $m['detail'] }}</p>
                         </div>
-                        <a href="#" class="py-3 text-[13px] font-medium text-[#A00000]">Remove</a>
+                            <button type="button" data-remove-med="{{ $m['id'] }}" class="py-3 text-[13px] font-medium text-[#A00000]">Remove</button>
                     </div>
                 @endforeach
                 <div id="medList"></div>
@@ -193,7 +204,7 @@
             </section>
 
             <div class="fixed bottom-0 left-1/2 flex w-full max-w-md -translate-x-1/2 gap-3 border-t border-[#E8E2D8] bg-white px-5 py-4">
-                <a href="/bhw/referrals" class="flex h-12 flex-1 items-center justify-center rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</a>
+                <a href="/bhw/residents" class="flex h-12 flex-1 items-center justify-center rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</a>
                 <button type="submit" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Save changes</button>
             </div>
                 <input type="file" id="photoInput" name="profile_photo" accept="image/*" class="hidden">
@@ -229,6 +240,23 @@
                     </div>
                 </div>
         </form>
+        <form id="removeMedForm" method="POST" class="hidden">
+            @csrf
+            @method('DELETE')
+        </form>
+                <div id="saveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
+                    <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
+                        <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
+                        <h2 class="text-center text-lg font-semibold">Save this record?</h2>
+                        <p class="mb-4 mt-1 text-center text-[13px] text-gray-600">
+                            Your changes for {{ $resident['name'] }} will be saved, and you'll be taken back to the residents list.
+                        </p>
+                        <div class="flex gap-2.5">
+                            <button type="button" id="cancelSave" class="h-12 flex-1 rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Keep editing</button>
+                            <button type="button" id="confirmSave" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Yes, save</button>
+                        </div>
+                    </div>
+                </div>
                 {{-- Medical Status report modal--}}
                     <div id="scoreModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
                 <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
@@ -343,8 +371,7 @@
             {{-- Address/Barangay --}}
 
                 <div id="moveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
-            <form method="POST" action="/bhw/records/{{ $id }}/move"
-                onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
+                <form method="POST" action="/bhw/records/{{ $id }}/move" onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
                 class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
                 @csrf
                 <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
@@ -358,8 +385,8 @@
                 <label class="{{ $label }}">New barangay</label>
                 <select name="barangay_id" required class="{{ $input }} mb-3">
                     <option value="" disabled selected>[Select barangay]</option>
-                    @foreach ([1 => 'Barangay 1', 2 => 'Barangay 2', 3 => 'Barangay 3'] as $bid => $bname)
-                        <option value="{{ $bid }}">{{ $bname }}</option>
+                    @foreach ($barangays as $b)
+                        <option value="{{ $b->id }}">{{ $b->name }}</option>
                     @endforeach
                 </select>
 
@@ -374,6 +401,19 @@
                     <button type="submit" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Confirm move</button>
                 </div>
             </form>
+            <div id="saveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
+                <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
+                    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
+                    <h2 class="text-center text-lg font-semibold">Save this record?</h2>
+                    <p class="mb-4 mt-1 text-center text-[13px] text-gray-600">
+                        Your changes for {{ $resident['name'] }} will be saved, and you'll be taken back to the residents list.
+                    </p>
+                    <div class="flex gap-2.5">
+                        <button type="button" id="cancelSave" class="h-12 flex-1 rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Keep editing</button>
+                        <button type="button" id="confirmSave" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Yes, save</button>
+                    </div>
+                </div>
+            </div>
         </div>
                 
         
@@ -662,6 +702,57 @@
         document.getElementById('openMove').addEventListener('click', openMove);
         document.getElementById('cancelMove').addEventListener('click', closeMove);
         
+        const recordForm = document.getElementById('recordForm');
+        const saveBtn = recordForm.querySelector('button[type="submit"]');
+        const saveModal = document.getElementById('saveModal');
+        const confirmBtn = document.getElementById('confirmSave');
+        let confirmed = false;
+
+        function showSaveModal(show) {
+            saveModal.classList.toggle('hidden', !show);
+            saveModal.classList.toggle('flex', show);
+        }
+
+        // First submit: ask. Second submit (after "Yes, save"): go through.
+        recordForm.addEventListener('submit', (e) => {
+            if (!confirmed) {
+                e.preventDefault();
+                showSaveModal(true);
+                return;
+            }
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+        });
+
+        document.getElementById('cancelSave').addEventListener('click', () => showSaveModal(false));
+
+        confirmBtn.addEventListener('click', () => {
+            confirmed = true;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Saving...';
+            recordForm.requestSubmit();
+        });
+
+        // Coming back with the Back button: reset everything
+        window.addEventListener('pageshow', () => {
+            confirmed = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Remove';
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Yes, save';
+            showSaveModal(false);
+        });
+        
+        // Medication removal confirmation
+        const removeMedForm = document.getElementById('removeMedForm');
+        document.querySelectorAll('[data-remove-med]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!confirm('Remove this medication? Use this only for a mistake.')) return;
+                removeMedForm.action = '/bhw/records/{{ $id }}/medications/' + btn.dataset.removeMed;
+                removeMedForm.submit();
+            });
+        });
     </script>
+    
 </body>
 </html>

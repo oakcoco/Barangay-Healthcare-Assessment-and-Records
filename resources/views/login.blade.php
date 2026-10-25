@@ -19,17 +19,30 @@
         </div>
 
         <div class="flex-1 rounded-t-2xl bg-[#C80000] px-8 pb-10 pt-6 text-white">
-            <p class="mb-8 text-sm">
+            <p class="mb-6 text-sm">
                 <span class="mr-2 text-lg">文A</span>Language: <span class="underline">English</span>
             </p>
 
-            <label class="mb-2 block text-sm font-semibold">Email or Phone Number:</label>
-            <input type="text" class="mb-6 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+            @if (session('status'))
+                <div class="mb-4 rounded-lg bg-white px-3 py-2 text-xs text-[#3B5E14]">{{ session('status') }}</div>
+            @endif
+            @if ($errors->any())
+                <div class="mb-4 rounded-lg bg-white px-3 py-2 text-xs text-[#A00000]">{{ $errors->first() }}</div>
+            @endif
 
-            <label class="mb-2 block text-sm font-semibold">Password:</label>
-            <input type="password" class="mb-10 w-full rounded-lg border border-black bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+            <form method="POST" action="/login">
+                @csrf
+                <label class="mb-2 block text-sm font-semibold">Email or Phone Number:</label>
+                <input name="login" type="text" value="{{ old('login') }}" required class="mb-6 w-full rounded-lg bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
 
-            <a href="/dashboard" class="mx-auto block w-4/5 rounded-lg border border-black bg-[#6F9A2E] py-3 text-center text-sm font-semibold">Log In</a>
+                <label class="mb-2 block text-sm font-semibold">Password:</label>
+                <input name="password" type="password" required class="mb-10 w-full rounded-lg border border-black bg-[#D9D9D9] px-4 py-3 text-sm text-black focus:outline-none">
+                <label class="mb-8 flex items-center gap-2 text-xs">
+                    <input type="checkbox" name="remember" value="1" class="h-4 w-4 accent-[#6F9A2E]" @checked(old('remember'))>
+                    Remember me
+                </label>
+                <button type="submit" class="mx-auto block w-4/5 rounded-lg border border-black bg-[#6F9A2E] py-3 text-center text-sm font-semibold">Log In</button>
+            </form>
 
             <p class="mt-8 text-center text-xs text-red-200">Don't have an account? <a href="/register" class="underline">Click here to Sign Up.</a></p>
         </div>

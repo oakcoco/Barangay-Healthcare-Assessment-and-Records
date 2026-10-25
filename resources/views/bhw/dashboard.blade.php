@@ -41,11 +41,13 @@
                     <p class="text-sm font-medium">{{ $e['title'] }}</p>
                     <p class="text-[11px] text-gray-500">{{ $e['date'] }} · {{ $e['venue'] }}</p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <a href="/bhw/events/{{ $loop->iteration }}/edit" class="flex h-11 items-center justify-center rounded-lg border border-black bg-white text-xs">Edit</a>
-                        
-                        {{-- THIS IS THE DELETE BUTTON IF YOU EVER FIND NEED TO LINK IT TO THE DATABASE--}}
-                        
-                        <button class="h-11 rounded-lg border border-black bg-white text-xs text-red-700">Delete</button>
+                        <a href="/bhw/events/{{ $e['id'] }}/edit" class="flex h-11 items-center justify-center rounded-lg border border-black bg-white text-xs">Edit</a>
+
+                        <form method="POST" action="/bhw/events/{{ $e['id'] }}" onsubmit="return confirm('Delete this event?')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="h-11 w-full rounded-lg border border-black bg-white text-xs text-red-700">Delete</button>
+                        </form>
                     </div>
                 </div>
             @endforeach
@@ -58,13 +60,15 @@
                     <p class="text-sm font-medium">{{ $p['name'] }}</p>
                     <p class="text-[11px] text-gray-500">{{ $p['barangay'] }} · Resident</p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-
-                        {{--VV BUTTONS FOR APPROVE AND REJECT VV--}}
-
-                        <button class="h-11 rounded-lg bg-[#4E7A1D] text-xs font-medium text-white">Approve</button>
-                        <button class="h-11 rounded-lg border border-black bg-white text-xs text-red-700">Reject</button>
-                    </div>
-                </div>
+                        <form method="POST" action="/bhw/signups/{{ $p['id'] }}/approve">
+                            @csrf
+                            <button type="submit" class="h-11 w-full rounded-lg bg-[#4E7A1D] text-xs font-medium text-white">Approve</button>
+                        </form>
+                        <form method="POST" action="/bhw/signups/{{ $p['id'] }}/reject" onsubmit="return confirm('Reject this sign-up?')">
+                            @csrf
+                            <button type="submit" class="h-11 w-full rounded-lg border border-black bg-white text-xs text-red-700">Reject</button>
+                        </form>
+                    </div>                  
             @endforeach
         </div>
 
@@ -77,7 +81,7 @@
             <a href="/bhw/dashboard" class="flex flex-1 flex-col items-center gap-0.5 font-semibold text-black">
                 <x-heroicon-o-home class="h-6 w-6" /> Home
             </a>
-            <a href="referrals" class="flex flex-1 flex-col items-center gap-0.5 text-black">
+            <a href="/bhw/residents" class="flex flex-1 flex-col items-center gap-0.5 text-black">
                 <x-heroicon-o-clipboard-document-list class="h-6 w-6" /> Records
             </a>
             <a href="/bhw/profile" class="flex flex-1 flex-col items-center gap-0.5 text-black">

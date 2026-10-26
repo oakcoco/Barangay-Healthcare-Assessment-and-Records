@@ -80,7 +80,7 @@
                 <label class="{{ $label }}">Barangay</label>
                 <div class="mb-3 flex h-11 items-center justify-between rounded-[10px] border border-[#CFC8BA] bg-[#F6F4F0] px-3 text-sm">
                     <span>{{ $resident['barangay'] }}</span>
-                    <button type="button" id="openMove" class="text-[13px] font-medium text-[#3B5E14]">Change</button>
+                    <button type="button" id="openMove" class="cursor-pointer text-[13px] font-medium text-[#3B5E14]">Change</button>
                 </div>
 
                 <label class="{{ $label }}">Contact number</label>
@@ -263,7 +263,7 @@
                     </div>
                 </div>
         {{-- Medications modal --}}
-            <div id="medModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
+        <div id="medModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
             <div class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
                 <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
                 <h2 class="text-center text-lg font-semibold">Add medication</h2>
@@ -322,10 +322,60 @@
             </div>
         </div>
 
-            {{-- Address/Barangay --}}
+        {{-- Score modal --}}
+        <div id="scoreModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
+            <div class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
+                <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
+                <h2 class="text-center text-lg font-semibold">Add score</h2>
+                <p class="mb-4 mt-0.5 text-center text-[13px] text-gray-600">Cholesterol, hemoglobin, uric acid and other lab scores</p>
 
-                <div id="moveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
-                <form method="POST" action="/bhw/records/{{ $id }}/move" onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
+                <label class="{{ $label }}">Score type</label>
+                <select id="scoreType" class="{{ $input }} mb-3">
+                    <option>Cholesterol</option>
+                    <option>Hemoglobin</option>
+                    <option>Uric acid</option>
+                    <option>Other</option>
+                </select>
+
+                <div id="otherWrap" class="mb-3 hidden">
+                    <label class="{{ $label }}">Score name</label>
+                    <input id="scoreOtherName" type="text" placeholder="[Score name]" class="{{ $input }}">
+                </div>
+
+                <div class="mb-3 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="{{ $label }}">Value</label>
+                        <input id="scoreValue" type="number" step="any" min="0" placeholder="[#]" class="{{ $input }}">
+                    </div>
+                    <div>
+                        <label class="{{ $label }}">Unit</label>
+                        <select id="scoreUnit" class="{{ $input }}"></select>
+                    </div>
+                </div>
+
+                <div class="mb-2 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="{{ $label }}">Date</label>
+                        <input id="scoreDate" type="date" class="{{ $input }}">
+                    </div>
+                    <div>
+                        <label class="{{ $label }}">Time</label>
+                        <input id="scoreTime" type="time" class="{{ $input }}">
+                    </div>
+                </div>
+
+                <p id="scoreError" class="my-2 hidden text-xs text-[#A00000]"></p>
+
+                <div class="mt-3 flex gap-2.5">
+                    <button type="button" id="cancelScore" class="h-12 flex-1 rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</button>
+                    <button type="button" id="saveScore" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Add score</button>
+                </div>
+            </div>
+        </div>
+
+            {{-- Address/Barangay --}}
+        <div id="moveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
+            <form method="POST" action="/bhw/records/{{ $id }}/move" onsubmit="return confirm('Move this resident to the new barangay? You will no longer see their record.')"
                 class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
                 @csrf
                 <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
@@ -355,19 +405,6 @@
                     <button type="submit" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Confirm move</button>
                 </div>
             </form>
-            <div id="saveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
-                <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
-                    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
-                    <h2 class="text-center text-lg font-semibold">Save this record?</h2>
-                    <p class="mb-4 mt-1 text-center text-[13px] text-gray-600">
-                        Your changes for {{ $resident['name'] }} will be saved, and you'll be taken back to the residents list.
-                    </p>
-                    <div class="flex gap-2.5">
-                        <button type="button" id="cancelSave" class="h-12 flex-1 rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Keep editing</button>
-                        <button type="button" id="confirmSave" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Yes, save</button>
-                    </div>
-                </div>
-            </div>
         </div>
                 
         

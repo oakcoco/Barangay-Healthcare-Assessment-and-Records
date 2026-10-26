@@ -278,9 +278,6 @@ Route::middleware(['auth', 'role'])->group(function () {
             ->where('r.id', $id)->whereNull('r.deleted_at')
             ->select('r.*', 'b.name as barangay_name')->first();
 
-
-
-        
         $address = DB::table('resident_residences')
             ->where('resident_id', $resident->id)->whereNull('moved_out_on')->value('address');
 
@@ -301,14 +298,26 @@ Route::middleware(['auth', 'role'])->group(function () {
                 'id' => $resident->resident_no ?? '—',
                 'barangay' => $resident->barangay_name,
             ],
-                'barangays' => DB::table('barangays')->where('id', '!=', $resident->barangay_id)->orderBy('name')->get(),
-                'profile' => [
+            'barangays' => DB::table('barangays')->where('id', '!=', $resident->barangay_id)->orderBy('name')->get(),
+            'last' => [
+                'vitals' => DB::table('vital_signs')->where('resident_id', $resident->id)->max('recorded_at'),
+                'nutrition' => DB::table('nutritional_records')->where('resident_id', $resident->id)->max('recorded_at'),
+                ],
+            'profile' => [
                 'full_name' => $resident->full_name,
                 'birthdate' => $resident->birthdate,    
                 'sex' => $resident->sex,
                 'phone' => $resident->phone,
                 'address' => $address,
-            ],
+                ],
+            'scores' => DB::table('medical_scores')->where('resident_id', $resident->id)->whereNull('deleted_at')
+            ->orderByDesc('recorded_at')->limit(8)->get()
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'title' => ($s->score_type === 'other' ? $s->label : ucfirst(str_replace('_', ' ', $s->score_type))).': '
+                    .rtrim(rtrim(number_format($s->value, 2, '.', ''), '0'), '.').' '.$s->unit,
+                'when' => Carbon::parse($s->recorded_at)->format('M j, Y g:i A'),
+            ])->all(), 
             'medications' => $medications,
             
             'photoCount' => DB::table('record_photos')->where('resident_id', $resident->id)->whereNull('deleted_at')->count(),
@@ -354,10 +363,10 @@ Route::middleware(['auth', 'role'])->group(function () {
         ]);
     });
 
-    // SAVE RECORD: citizen profile, vital signs and medications (other sections are not stored yet)
+    // SAVE RECORD: citizen profile, vital signs, nutrition, scores and medications
     Route::post('/bhw/records/{id}', function (Request $request, $id) {
         $user = $request->user();
-
+    
         $resident = DB::table('residents as r')
             ->join('bhw_assignments as a', function ($j) use ($user) {
                 $j->on('a.resident_id', '=', 'r.id')->where('a.bhw_user_id', $user->id)->whereNull('a.ended_on');
@@ -365,10 +374,17 @@ Route::middleware(['auth', 'role'])->group(function () {
             ->where('r.id', $id)->whereNull('r.deleted_at')
             ->select('r.*')->first();
         abort_unless($resident, 404);
-
-        // Phone numbers: ignore spaces and dashes
+    
         $request->merge(['contact' => preg_replace('/[\s\-]/', '', (string) $request->input('contact'))]);
-
+    
+        $scoreTypes = ['Cholesterol' => 'cholesterol', 'Hemoglobin' => 'hemoglobin', 'Uric acid' => 'uric_acid', 'Other' => 'other'];
+        $scoreUnits = [
+            'Cholesterol' => ['mg/dL', 'mmol/L'],
+            'Hemoglobin' => ['g/dL', 'g/L'],
+            'Uric acid' => ['mg/dL', 'µmol/L'],
+            'Other' => ['mg/dL', 'mmol/L', 'g/dL', '%', 'U/L'],
+        ];
+    
         $data = $request->validate([
             'full_name' => 'required|string|max:255',
             'birthdate' => 'nullable|date|before_or_equal:today',
@@ -381,6 +397,15 @@ Route::middleware(['auth', 'role'])->group(function () {
             'resp' => 'nullable|integer|between:4,80',
             'pulse' => 'nullable|integer|between:20,250',
             'cbg' => 'nullable|integer|between:10,800',
+            'height' => 'nullable|numeric|between:30,250',
+            'weight' => 'nullable|numeric|between:2,400',
+            'scores' => 'nullable|array',
+            'scores.*.type' => ['required', \Illuminate\Validation\Rule::in(array_keys($scoreTypes))],
+            'scores.*.value' => 'required|numeric|gt:0|max:99999',
+            'scores.*.unit' => 'required|string|max:10',
+            'scores.*.label' => 'nullable|string|max:80',
+            'scores.*.date' => 'required|date|before_or_equal:today',
+            'scores.*.time' => 'required|date_format:H:i',
             'medications' => 'nullable|array',
             'medications.*.name' => 'required|string|max:120',
             'medications.*.dose' => 'required|numeric|gt:0',
@@ -391,15 +416,19 @@ Route::middleware(['auth', 'role'])->group(function () {
         ], [
             'full_name.required' => 'The resident needs a full name.',
             'birthdate.before_or_equal' => 'Birthdate cannot be in the future.',
-            'contact.regex' => 'Enter a valid mobile number, Must be 11 numbers and starts with "09".',
+            'contact.regex' => 'Enter a valid mobile number, like 09171234567.',
             'bp.regex' => 'Blood pressure must look like 120/80.',
             'temp.between' => 'Temperature must be between 30 and 45 °C.',
             'spo2.between' => 'Oxygen saturation must be between 0 and 100 %.',
             'resp.between' => 'Respiratory rate must be between 4 and 80 per minute.',
             'pulse.between' => 'Pulse rate must be between 20 and 250 bpm.',
             'cbg.between' => 'CBG must be between 10 and 800 mg/dL.',
+            'height.between' => 'Height must be between 30 and 250 cm.',
+            'weight.between' => 'Weight must be between 2 and 400 kg.',
+            'scores.*.value.gt' => 'A score value must be greater than 0.',
+            'scores.*.date.before_or_equal' => 'A score date cannot be in the future.',
         ]);
-
+    
         // Blood pressure is typed as "120/80" and stored as two numbers
         $sys = $dia = null;
         if (! empty($data['bp'])) {
@@ -408,7 +437,18 @@ Route::middleware(['auth', 'role'])->group(function () {
                 return back()->withErrors(['bp' => 'Blood pressure is out of range. The top number must be higher than the bottom one.'])->withInput();
             }
         }
-
+    
+        // Each score's unit must suit its type, and "Other" needs a name
+        $scores = $data['scores'] ?? [];
+        foreach ($scores as $s) {
+            if (! in_array($s['unit'], $scoreUnits[$s['type']], true)) {
+                return back()->withErrors(['scores' => $s['type'].' cannot be recorded in '.$s['unit'].'.'])->withInput();
+            }
+            if ($s['type'] === 'Other' && trim($s['label'] ?? '') === '') {
+                return back()->withErrors(['scores' => 'Give the score a name when the type is Other.'])->withInput();
+            }
+        }
+    
         // --- Citizen profile: did anything actually change? ---
         $newProfile = [
             'full_name' => trim($data['full_name']),
@@ -423,13 +463,13 @@ Route::middleware(['auth', 'role'])->group(function () {
             'phone' => $resident->phone,
         ];
         $profileChanged = $newProfile != $oldProfile;
-
+    
         $currentResidence = DB::table('resident_residences')
             ->where('resident_id', $resident->id)->whereNull('moved_out_on')->first();
         $newAddress = ($data['address'] ?? '') !== '' ? trim($data['address']) : null;
         $addressChanged = ($currentResidence->address ?? null) != $newAddress;
-
-        // --- Vital signs and medications ---
+    
+        // --- Vital signs ---
         $readings = [
             'temperature_c' => $data['temp'] ?? null,
             'spo2_percent' => $data['spo2'] ?? null,
@@ -438,8 +478,7 @@ Route::middleware(['auth', 'role'])->group(function () {
             'cbg_mgdl' => $data['cbg'] ?? null,
         ];
         $hasVitals = $sys !== null || count(array_filter($readings, fn ($v) => $v !== null)) > 0;
-        $meds = $data['medications'] ?? [];
-
+    
         if ($hasVitals) {
             $dupe = DB::table('vital_signs')
                 ->where('resident_id', $resident->id)->where('recorded_by', $user->id)
@@ -451,21 +490,40 @@ Route::middleware(['auth', 'role'])->group(function () {
                 ->where('pulse_bpm', $readings['pulse_bpm'])
                 ->where('cbg_mgdl', $readings['cbg_mgdl'])
                 ->exists();
-
+    
             if ($dupe) {
                 $hasVitals = false;
             }
         }
-
-        if (! $hasVitals && ! $meds && ! $profileChanged && ! $addressChanged) {
-            return back()->with('status', 'Nothing new to save. Only the citizen profile, vital signs and medications are stored for now.');
+    
+        // --- Nutritional status (the database calculates BMI itself) ---
+        $height = $data['height'] ?? null;
+        $weight = $data['weight'] ?? null;
+        $hasNutrition = $height !== null || $weight !== null;
+    
+        if ($hasNutrition) {
+            $dupeNutrition = DB::table('nutritional_records')
+                ->where('resident_id', $resident->id)->where('recorded_by', $user->id)
+                ->where('recorded_at', '>=', now()->subMinutes(2))
+                ->where('height_cm', $height)->where('weight_kg', $weight)
+                ->exists();
+    
+            if ($dupeNutrition) {
+                $hasNutrition = false;
+            }
         }
-
-        DB::transaction(function () use ($hasVitals, $sys, $dia, $readings, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress) {
+    
+        $meds = $data['medications'] ?? [];
+    
+        if (! $hasVitals && ! $hasNutrition && ! $scores && ! $meds && ! $profileChanged && ! $addressChanged) {
+            return back()->with('status', 'Nothing new to save. Only the citizen profile, vital signs, nutrition, scores and medications are stored for now.');
+        }
+    
+        DB::transaction(function () use ($hasVitals, $hasNutrition, $height, $weight, $sys, $dia, $readings, $scores, $scoreTypes, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress) {
             if ($profileChanged) {
                 DB::table('residents')->where('id', $resident->id)->update($newProfile + ['updated_at' => now()]);
             }
-
+    
             if ($addressChanged) {
                 if ($currentResidence) {
                     DB::table('resident_residences')->where('id', $currentResidence->id)->update(['address' => $newAddress]);
@@ -480,7 +538,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                     ]);
                 }
             }
-
+    
             if ($hasVitals) {
                 DB::table('vital_signs')->insert(array_merge($readings, [
                     'resident_id' => $resident->id,
@@ -491,7 +549,32 @@ Route::middleware(['auth', 'role'])->group(function () {
                     'created_at' => now(),
                 ]));
             }
-
+    
+            if ($hasNutrition) {
+                DB::table('nutritional_records')->insert([
+                    'resident_id' => $resident->id,
+                    'recorded_by' => $user->id,
+                    'recorded_at' => now(),
+                    'height_cm' => $height,
+                    'weight_kg' => $weight,
+                    'created_at' => now(),
+                ]);
+            }
+    
+            foreach ($scores as $s) {
+                DB::table('medical_scores')->insert([
+                    'resident_id' => $resident->id,
+                    'recorded_by' => $user->id,
+                    'score_type' => $scoreTypes[$s['type']],
+                    'label' => $s['type'] === 'Other' ? trim($s['label']) : null,
+                    'value' => $s['value'],
+                    'unit' => $s['unit'],
+                    'measured_as' => null,
+                    'recorded_at' => $s['date'].' '.$s['time'].':00',
+                    'created_at' => now(),
+                ]);
+            }
+    
             foreach ($meds as $m) {
                 DB::table('medications')->insert([
                     'resident_id' => $resident->id,
@@ -507,15 +590,32 @@ Route::middleware(['auth', 'role'])->group(function () {
                 ]);
             }
         });
-
+    
         $saved = array_filter([
             ($profileChanged || $addressChanged) ? 'citizen profile' : null,
             $hasVitals ? 'vital signs' : null,
+            $hasNutrition ? 'nutrition' : null,
+            $scores ? count($scores).' score'.(count($scores) > 1 ? 's' : '') : null,
             $meds ? count($meds).' medication'.(count($meds) > 1 ? 's' : '') : null,
         ]);
-
+    
         return redirect('/bhw/residents')->with('status', 'Saved for '.$resident->full_name.': '.implode(', ', $saved).'.');
     });
+    
+    // REMOVE A SCORE ADDED BY MISTAKE (hidden, not erased)
+    Route::delete('/bhw/records/{id}/scores/{score}', function (Request $request, $id, $score) {
+        $allowed = DB::table('bhw_assignments')
+            ->where('resident_id', $id)->where('bhw_user_id', $request->user()->id)->whereNull('ended_on')->exists();
+        abort_unless($allowed, 404);
+    
+        $removed = DB::table('medical_scores')
+            ->where('id', $score)->where('resident_id', $id)->whereNull('deleted_at')
+            ->update(['deleted_at' => now()]);
+        abort_unless($removed, 404);
+    
+        return redirect("/bhw/records/{$id}/edit")->with('status', 'Score removed.');
+    });
+    
 
     // POST EVENT FORM
     Route::get('/bhw/events/create', function () {

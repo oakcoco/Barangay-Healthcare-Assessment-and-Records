@@ -122,7 +122,7 @@
             {{-- Vital signs --}}
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Vital signs</h2>
-                <p class="mb-3 text-xs text-gray-600">Last recorded: [Date, time]</p>
+                <p class="mb-3 text-xs text-gray-600">Last recorded: {{ $last['vitals'] ? \Carbon\Carbon::parse($last['vitals'])->format('M j, Y g:i A') : 'no readings yet' }}</p>
                 <div class="grid grid-cols-2 gap-3">
                     @foreach ([
                         ['name' => 'bp',    'label' => 'Blood pressure',          'unit' => 'mmHg',  'type' => 'text',   'ph' => '120/80', 'attrs' => 'inputmode="numeric" pattern="\d{2,3}/\d{2,3}" title="Use the format 120/80"'],
@@ -146,7 +146,7 @@
             {{-- Nutritional status --}}
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Nutritional status</h2>
-                <p class="mb-3 text-xs text-gray-600">Last recorded: [Date]</p>
+                <p class="mb-3 text-xs text-gray-600">Last recorded: {{ $last['nutrition'] ? \Carbon\Carbon::parse($last['nutrition'])->format('M j, Y g:i A') : 'no readings yet' }}</p>
                 <div class="mb-3 grid grid-cols-2 gap-3">
                     <div><label class="{{ $label }}">Height (cm)</label><input id="height" name="height" type="number" placeholder="[#]" class="{{ $input }}"></div>
                     <div><label class="{{ $label }}">Weight (kg)</label><input id="weight" name="weight" type="number" step="0.1" placeholder="[#]" class="{{ $input }}"></div>
@@ -158,19 +158,23 @@
             {{-- Medical status reports --}}
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Medical status reports</h2>
-                <p class="mb-3 text-xs text-gray-600">Last recorded: [Date]</p>
-                <div class="mb-3 grid grid-cols-2 gap-3">
-                    <div><label class="{{ $label }}">Blood glucose (mg/dL)</label><input name="glucose" type="number" placeholder="[#]" class="{{ $input }}"></div>
-                    <div>
-                        <label class="{{ $label }}">Measured</label>
-                        <select name="glucose_type" class="{{ $input }}"><option>[Select]</option><option>Fasting</option><option>After meal</option></select>
+                <p class="mb-3 text-xs text-gray-600">Cholesterol, hemoglobin, uric acid and other lab scores. Glucose is recorded as CBG under Vital signs.</p>
+
+                @foreach ($scores as $s)
+                    <div class="mb-3 flex items-center justify-between rounded-[10px] border border-[#E8E2D8] px-3 py-2.5">
+                        <div>
+                            <p class="text-sm font-medium">{{ $s['title'] }}</p>
+                            <p class="text-xs text-gray-600">{{ $s['when'] }}</p>
+                        </div>
+                        <button type="button" data-remove-score="{{ $s['id'] }}" class="py-3 text-[13px] font-medium text-[#A00000]">Remove</button>
                     </div>
-                </div>
+                @endforeach
+
                 <div id="scoreList" class="mb-3 space-y-2"></div>
                 <button type="button" id="openScore" class="flex h-11 w-full items-center justify-center rounded-[10px] border border-dashed border-[#4E7A1D] text-sm font-medium text-[#3B5E14]">+ Add another score</button>
             </section>
 
-            {{-- Medications --}}
+        {{-- Medications --}}
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Medications</h2>
                 <p class="mb-3 text-xs text-gray-600">What the resident currently takes</p>
@@ -244,6 +248,7 @@
             @csrf
             @method('DELETE')
         </form>
+            {{-- Save confirmation modal--}}
                 <div id="saveModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
                     <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
                         <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
@@ -257,57 +262,6 @@
                         </div>
                     </div>
                 </div>
-                {{-- Medical Status report modal--}}
-                    <div id="scoreModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
-                <div class="w-full max-w-md bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
-                    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-[#CFC8BA]"></div>
-                    <h2 class="text-center text-lg font-semibold">Add score</h2>
-                    <p class="mb-4 mt-0.5 text-center text-[13px] text-gray-600">Adds a reading to this resident's record</p>
-
-                    <label class="{{ $label }}">Score type</label>
-                    <select id="scoreType" class="{{ $input }} mb-3">
-                        @foreach (['Blood glucose', 'Cholesterol', 'Hemoglobin', 'Uric acid', 'Other'] as $t)
-                            <option>{{ $t }}</option>
-                        @endforeach
-                    </select>
-
-                    <div class="mb-3 grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="{{ $label }}">Value</label>
-                            <input id="scoreValue" type="number" step="any" min="0" placeholder="[#]" class="{{ $input }}">
-                        </div>
-                        <div>
-                            <label class="{{ $label }}">Unit</label>
-                            <select id="scoreUnit" class="{{ $input }}"></select>
-                        </div>
-                    </div>
-
-                    <div id="measuredWrap" class="mb-3">
-                        <p class="{{ $label }}">Measured</p>
-                        <div class="flex gap-2">
-                            @foreach (['Fasting', 'After meal', 'Random'] as $m)
-                                <label class="flex-1">
-                                    <input type="radio" name="scoreMeasured" value="{{ $m }}" class="peer sr-only" @checked($m === 'Fasting')>
-                                    <span class="block rounded-[10px] border border-[#CFC8BA] bg-white py-2.5 text-center text-[13px] peer-checked:border-[#4E7A1D] peer-checked:bg-[#E9F0DD] peer-checked:font-medium peer-checked:text-[#3B5E14]">{{ $m }}</span>
-                                </label>
-                            @endforeach
-                        </div>
-                    </div>
-
-                    <div class="mb-3 grid grid-cols-2 gap-3">
-                        <div><label class="{{ $label }}">Date</label><input id="scoreDate" type="date" class="{{ $input }}"></div>
-                        <div><label class="{{ $label }}">Time</label><input id="scoreTime" type="time" class="{{ $input }}"></div>
-                    </div>
-
-                    <p id="scoreError" class="mb-3 hidden text-xs text-[#A00000]">Enter a value for the score.</p>
-
-                    <div class="flex gap-2.5">
-                        <button type="button" id="cancelScore" class="h-12 flex-1 rounded-[10px] border border-[#CFC8BA] bg-white text-sm font-medium">Cancel</button>
-                        <button type="button" id="saveScore" class="h-12 flex-[2] rounded-[10px] bg-[#4E7A1D] text-sm font-medium text-white">Add score</button>
-                    </div>
-                </div>
-            </div>
-    </div>
         {{-- Medications modal --}}
             <div id="medModal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50">
             <div class="max-h-[92vh] w-full max-w-md overflow-y-auto bg-white px-5 pb-6 pt-3" style="border-radius: 20px 20px 0 0;">
@@ -507,13 +461,16 @@
             closeModal();
         });
 
-        // + Add Another Score from EDIT RECORD
-            const SCORE_UNITS = {
-        'Blood glucose': ['mg/dL', 'mmol/L'],
-        'Cholesterol': ['mg/dL', 'mmol/L'],
-        'Hemoglobin': ['g/dL', 'g/L'],
-        'Uric acid': ['mg/dL', 'µmol/L'],
-        'Other': ['mg/dL', 'mmol/L', 'g/dL', '%', 'U/L'],
+        // Units allowed for each score type. The Unit dropdown is rebuilt from this list
+        // whenever the Score type changes, so a score cannot be saved in a unit that makes
+        // no sense for it (for example, hemoglobin in mg/dL).
+        // Keep it identical to $scoreUnits in the POST /bhw/records/{id} route in
+        // routes/web.php, because the server checks the same list again when you save.
+        const SCORE_UNITS = {
+            'Cholesterol': ['mg/dL', 'mmol/L'],
+            'Hemoglobin': ['g/dL', 'g/L'],
+            'Uric acid': ['mg/dL', 'µmol/L'],
+            'Other': ['mg/dL', 'mmol/L', 'g/dL', '%', 'U/L'],
         };
         const scoreModal = document.getElementById('scoreModal');
         const scoreType = document.getElementById('scoreType');
@@ -522,19 +479,21 @@
         const scoreDate = document.getElementById('scoreDate');
         const scoreTime = document.getElementById('scoreTime');
         const scoreError = document.getElementById('scoreError');
-        const measuredWrap = document.getElementById('measuredWrap');
+        const otherWrap = document.getElementById('otherWrap');
+        const scoreOtherName = document.getElementById('scoreOtherName');
         const scoreList = document.getElementById('scoreList');
         let scoreIndex = 0;
 
         function fillUnits() {
             scoreUnit.innerHTML = '';
             SCORE_UNITS[scoreType.value].forEach(u => scoreUnit.add(new Option(u, u)));
-            measuredWrap.classList.toggle('hidden', scoreType.value !== 'Blood glucose');
+            otherWrap.classList.toggle('hidden', scoreType.value !== 'Other');
         }
         function openScore() {
-            scoreType.value = 'Blood glucose';
+            scoreType.value = 'Cholesterol';
             fillUnits();
             scoreValue.value = '';
+            scoreOtherName.value = '';
             const n = new Date(), p = v => String(v).padStart(2, '0');
             scoreDate.value = `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
             scoreTime.value = `${p(n.getHours())}:${p(n.getMinutes())}`;
@@ -546,6 +505,10 @@
             scoreModal.classList.add('hidden');
             scoreModal.classList.remove('flex');
         }
+        function showScoreError(msg) {
+            scoreError.textContent = msg;
+            scoreError.classList.remove('hidden');
+        }
         function addScoreRow(s) {
             const i = scoreIndex++;
             const row = document.createElement('div');
@@ -554,10 +517,10 @@
             const info = document.createElement('div');
             const title = document.createElement('p');
             title.className = 'text-sm font-medium';
-            title.textContent = `${s.type}: ${s.value} ${s.unit}`;
+            title.textContent = `${s.type === 'Other' ? s.label : s.type}: ${s.value} ${s.unit}`;
             const detail = document.createElement('p');
             detail.className = 'text-xs text-gray-600';
-            detail.textContent = [s.measured, `${s.date} ${s.time}`].filter(Boolean).join(' · ');
+            detail.textContent = `${s.date} ${s.time} (not saved yet)`;
             info.append(title, detail);
 
             const remove = document.createElement('button');
@@ -568,11 +531,11 @@
 
             row.append(info, remove);
             Object.entries(s).forEach(([k, v]) => {
-                const h = document.createElement('input');
-                h.type = 'hidden';
-                h.name = `scores[${i}][${k}]`;
-                h.value = v;
-                row.append(h);
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = `scores[${i}][${k}]`;
+                hidden.value = v;
+                row.append(hidden);
             });
             scoreList.append(row);
         }
@@ -583,19 +546,31 @@
         document.getElementById('saveScore').addEventListener('click', () => {
             const value = parseFloat(scoreValue.value);
             if (isNaN(value) || value <= 0) {
-                scoreError.classList.remove('hidden');
+                showScoreError('Enter a value for the score.');
                 return;
             }
-            const checked = document.querySelector('input[name="scoreMeasured"]:checked');
+            if (scoreType.value === 'Other' && scoreOtherName.value.trim() === '') {
+                showScoreError('Give the score a name.');
+                return;
+            }
             addScoreRow({
                 type: scoreType.value,
+                label: scoreType.value === 'Other' ? scoreOtherName.value.trim() : '',
                 value: value,
                 unit: scoreUnit.value,
-                measured: scoreType.value === 'Blood glucose' && checked ? checked.value : '',
                 date: scoreDate.value,
                 time: scoreTime.value,
             });
             closeScore();
+        });
+
+        // Remove a score that is already saved (uses the same hidden form as medications)
+        document.querySelectorAll('[data-remove-score]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!confirm('Remove this score? Use this only for a mistake.')) return;
+                removeMedForm.action = '/bhw/records/{{ $id }}/scores/' + btn.dataset.removeScore;
+                removeMedForm.submit();
+            });
         });
 
         //Add Another Medication from EDIT RECORD
@@ -737,7 +712,7 @@
         window.addEventListener('pageshow', () => {
             confirmed = false;
             saveBtn.disabled = false;
-            saveBtn.textContent = 'Remove';
+            saveBtn.textContent = 'Save Changes';
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'Yes, save';
             showSaveModal(false);

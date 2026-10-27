@@ -23,8 +23,8 @@
             <div class="mt-4 flex items-center gap-3.5">
                 <button type="button" id="openPhoto" aria-label="Change patient photo" class="relative flex-none" style="width: 64px; height: 64px;">
                     <span class="flex items-center justify-center overflow-hidden rounded-full bg-white text-[#C80000]" style="width: 64px; height: 64px;">
-                        <img id="avatarImg" alt="" class="hidden h-full w-full object-cover">
-                        <x-heroicon-o-user id="avatarIcon" style="width: 32px; height: 32px;" />
+                        <img id="avatarImg" src="{{ $photoUrl ?? '' }}" alt="" class="{{ $photoUrl ? '' : 'hidden' }} h-full w-full object-cover">
+                        <x-heroicon-o-user id="avatarIcon" class="{{ $photoUrl ? 'hidden' : '' }}" style="width: 32px; height: 32px;" />
                     </span>
                     <span class="absolute flex items-center justify-center rounded-full border-2 border-white bg-[#4E7A1D] text-white" style="right: -4px; bottom: -4px; width: 28px; height: 28px;">
                         <x-heroicon-o-camera style="width: 14px; height: 14px;" />
@@ -208,16 +208,29 @@
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Photo evidence</h2>
                 <p class="mb-3 text-xs text-gray-600">Attach photos to this medical record</p>
-                <div class="grid grid-cols-3 gap-3">
-                    @for ($i = 0; $i < $photoCount; $i++)
-                        <div class="flex h-24 items-center justify-center rounded-[10px] border border-dashed border-[#B5AE9F] bg-[#ECE8E0] text-xs text-gray-600">[Photo]</div>
-                    @endfor
-                    <label class="flex h-24 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-[#4E7A1D] px-2 text-center text-xs font-medium text-[#3B5E14]">
-                        <span id="photoLabel">+ Add photo</span>
-                        <input id="photos" type="file" name="photos[]" accept="image/*" multiple class="hidden">
-                    </label>
-                </div>
-                <p class="mt-3 text-xs text-gray-600">Add a caption and date to each photo</p>
+
+                @if ($evidence)
+                    <div class="mb-3 grid grid-cols-3 gap-3">
+                        @foreach ($evidence as $p)
+                            <div>
+                                <a href="{{ $p['url'] }}" target="_blank" rel="noopener">
+                                    <img src="{{ $p['url'] }}" alt="{{ $p['caption'] ?? 'Photo evidence' }}" class="h-24 w-full rounded-[10px] border border-[#E8E2D8] object-cover">
+                                </a>
+                                <p class="mt-1 truncate text-[11px] text-gray-600">{{ $p['caption'] ?? 'No caption' }}</p>
+                                @if ($p['date'])<p class="text-[10px] text-gray-500">{{ $p['date'] }}</p>@endif
+                                <button type="button" data-remove-photo="{{ $p['id'] }}" class="py-2 text-[12px] font-medium text-[#A00000]">Remove</button>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+
+                <div id="newPhotos" class="mb-3 space-y-3"></div>
+
+                <label class="flex h-11 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-[#4E7A1D] text-sm font-medium text-[#3B5E14]">
+                    + Add photos
+                    <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+                </label>
+                <p class="mt-3 text-xs text-gray-600">JPG, PNG or WebP, 2 MB or smaller, up to 5 per save. Choosing again replaces the photos you picked before saving.</p>
             </section>
 
             <div class="fixed bottom-0 left-1/2 flex w-full max-w-md -translate-x-1/2 gap-3 border-t border-[#E8E2D8] bg-white px-5 py-4">
@@ -432,9 +445,6 @@
         h.addEventListener('input', calcBmi);
         w.addEventListener('input', calcBmi);
 
-        document.getElementById('photos').addEventListener('change', function () {
-            document.getElementById('photoLabel').textContent = this.files.length ? this.files.length + ' selected' : '+ Add photo';
-        });
 
         // MODAL FOR PROFILE PICTURE CAPTURE
 
@@ -445,7 +455,7 @@
         const avatarImg = document.getElementById('avatarImg');
         const avatarIcon = document.getElementById('avatarIcon');
         const removeFlag = document.getElementById('removePhoto');
-        let confirmedFile = null, confirmedUrl = null, pendingUrl = null;
+        let confirmedFile = null, confirmedUrl = @json($photoUrl ?? null), pendingUrl = null;
 
         function showPreview(url) {
             photoPreview.src = url || '';
@@ -777,6 +787,66 @@
                 removeMedForm.submit();
             });
         });
+
+        //for photos
+        const photosInput = document.getElementById('photos');
+        const newPhotos = document.getElementById('newPhotos');
+        const todayStr = (() => {
+            const n = new Date(), p = v => String(v).padStart(2, '0');
+            return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
+        })();
+
+        photosInput.addEventListener('change', () => {
+            newPhotos.innerHTML = '';
+            const files = Array.from(photosInput.files);
+
+            if (files.length > 5 || files.some(f => f.size > 2 * 1024 * 1024)) {
+                alert('Choose up to 5 photos, each 2 MB or smaller.');
+                photosInput.value = '';
+                return;
+            }
+
+            files.forEach((file, i) => {
+                const row = document.createElement('div');
+                row.className = 'flex gap-3 rounded-[10px] border border-[#E8E2D8] p-2.5';
+
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = '';
+                img.className = 'h-16 w-16 flex-none rounded-lg object-cover';
+
+                const fields = document.createElement('div');
+                fields.className = 'flex-1 space-y-2';
+
+                const caption = document.createElement('input');
+                caption.type = 'text';
+                caption.name = `photo_captions[${i}]`;
+                caption.maxLength = 255;
+                caption.placeholder = 'Caption (optional)';
+                caption.className = 'h-10 w-full rounded-lg border border-[#CFC8BA] px-2 text-sm';
+
+                const date = document.createElement('input');
+                date.type = 'date';
+                date.name = `photo_dates[${i}]`;
+                date.value = todayStr;
+                date.max = todayStr;
+                date.className = 'h-10 w-full rounded-lg border border-[#CFC8BA] px-2 text-sm';
+
+                fields.append(caption, date);
+                row.append(img, fields);
+                newPhotos.append(row);
+            });
+        });
+
+        // Remove a photo that is already saved (uses the same hidden form as medications)
+        document.querySelectorAll('[data-remove-photo]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!confirm('Remove this photo? Use this only for a mistake.')) return;
+                removeMedForm.action = '/bhw/records/{{ $id }}/photos/' + btn.dataset.removePhoto;
+                removeMedForm.submit();
+            });
+        });
+
     </script>
     
 </body>

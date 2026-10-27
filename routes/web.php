@@ -294,6 +294,8 @@ Route::middleware(['auth', 'role'])->group(function () {
         $socioRow = DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)->first();
         
         return view('bhw.record-edit', [
+
+            // for change barangay
             'id' => $resident->id,
             'resident' => [
                 'name' => $resident->full_name,
@@ -307,6 +309,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                 'nutrition' => DB::table('nutritional_records')->where('resident_id', $resident->id)->max('recorded_at'),
                 ],
             
+            // for socio economic
             'socio' => [
             'employment' => $socioRow->employment_status ?? null,
             'income' => $socioRow->income_range ?? null,
@@ -315,6 +318,7 @@ Route::middleware(['auth', 'role'])->group(function () {
             'updated' => $socioRow ? Carbon::parse($socioRow->updated_at)->format('M j, Y g:i A') : null,
             ],
 
+            // for edit citizen profile
             'profile' => [
             'full_name' => $resident->full_name,
             'birthdate' => $resident->birthdate,    
@@ -323,6 +327,7 @@ Route::middleware(['auth', 'role'])->group(function () {
             'address' => $address,
             ],
                 
+            // for medical scores
             'scores' => DB::table('medical_scores')->where('resident_id', $resident->id)->whereNull('deleted_at')
             ->orderByDesc('recorded_at')->limit(8)->get()
             ->map(fn ($s) => [
@@ -340,6 +345,20 @@ Route::middleware(['auth', 'role'])->group(function () {
             'serviceList' => DB::table('social_services')->orderBy('id')->get(),
             'serviceIds' => DB::table('resident_social_services')->where('resident_id', $resident->id)
                 ->pluck('social_service_id')->map(fn ($v) => (int) $v)->all(),
+
+            //for photo
+            'photoUrl' => $resident->photo_path
+            ? "/bhw/records/{$resident->id}/photo?v=".substr(md5($resident->photo_path), 0, 8)
+            : null,
+            'evidence' => DB::table('record_photos')->where('resident_id', $resident->id)->whereNull('deleted_at')
+            ->orderByDesc('created_at')->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'url' => "/bhw/records/{$resident->id}/photos/{$p->id}",
+                'caption' => $p->caption,
+                'date' => $p->taken_on ? Carbon::parse($p->taken_on)->format('M j, Y') : null,
+            ])->all(),
+
         ]);
     });
 
@@ -381,10 +400,10 @@ Route::middleware(['auth', 'role'])->group(function () {
         ]);
     });
 
-    // SAVE RECORD: citizen profile, socioeconomic, vital signs, nutrition, scores and medications
+    // SAVE RECORD: citizen profile, socioeconomic, vital signs, nutrition, scores, medications and photos
     Route::post('/bhw/records/{id}', function (Request $request, $id) {
         $user = $request->user();
-    
+
         $resident = DB::table('residents as r')
             ->join('bhw_assignments as a', function ($j) use ($user) {
                 $j->on('a.resident_id', '=', 'r.id')->where('a.bhw_user_id', $user->id)->whereNull('a.ended_on');
@@ -392,9 +411,9 @@ Route::middleware(['auth', 'role'])->group(function () {
             ->where('r.id', $id)->whereNull('r.deleted_at')
             ->select('r.*')->first();
         abort_unless($resident, 404);
-    
+
         $request->merge(['contact' => preg_replace('/[\s\-]/', '', (string) $request->input('contact'))]);
-    
+
         $scoreTypes = ['Cholesterol' => 'cholesterol', 'Hemoglobin' => 'hemoglobin', 'Uric acid' => 'uric_acid', 'Other' => 'other'];
         $scoreUnits = [
             'Cholesterol' => ['mg/dL', 'mmol/L'],
@@ -402,7 +421,7 @@ Route::middleware(['auth', 'role'])->group(function () {
             'Uric acid' => ['mg/dL', 'µmol/L'],
             'Other' => ['mg/dL', 'mmol/L', 'g/dL', '%', 'U/L'],
         ];
-    
+
         $data = $request->validate([
             'full_name' => 'required|string|max:255',
             'birthdate' => 'nullable|date|before_or_equal:today',
@@ -421,6 +440,14 @@ Route::middleware(['auth', 'role'])->group(function () {
             'income' => ['nullable', \Illuminate\Validation\Rule::in(['below_10k', '10k_to_20k', 'above_20k'])],
             'services' => 'nullable|array',
             'services.*' => 'integer|exists:social_services,id',
+            'profile_photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_photo' => 'nullable|in:1',
+            'photos' => 'nullable|array|max:5',
+            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'photo_captions' => 'nullable|array',
+            'photo_captions.*' => 'nullable|string|max:255',
+            'photo_dates' => 'nullable|array',
+            'photo_dates.*' => 'nullable|date|before_or_equal:today',
             'scores' => 'nullable|array',
             'scores.*.type' => ['required', \Illuminate\Validation\Rule::in(array_keys($scoreTypes))],
             'scores.*.value' => 'required|numeric|gt:0|max:99999',
@@ -449,8 +476,18 @@ Route::middleware(['auth', 'role'])->group(function () {
             'weight.between' => 'Weight must be between 2 and 400 kg.',
             'scores.*.value.gt' => 'A score value must be greater than 0.',
             'scores.*.date.before_or_equal' => 'A score date cannot be in the future.',
+            'profile_photo.max' => 'The patient photo must be 2 MB or smaller.',
+            'profile_photo.image' => 'The patient photo must be a JPG, PNG or WebP image.',
+            'profile_photo.mimes' => 'The patient photo must be a JPG, PNG or WebP image.',
+            'profile_photo.uploaded' => 'The patient photo could not be uploaded. It may be too large.',
+            'photos.max' => 'You can add up to 5 photos at a time.',
+            'photos.*.max' => 'Each photo must be 2 MB or smaller.',
+            'photos.*.image' => 'Photos must be JPG, PNG or WebP images.',
+            'photos.*.mimes' => 'Photos must be JPG, PNG or WebP images.',
+            'photos.*.uploaded' => 'A photo could not be uploaded. It may be too large.',
+            'photo_dates.*.before_or_equal' => 'A photo date cannot be in the future.',
         ]);
-    
+
         // Blood pressure is typed as "120/80" and stored as two numbers
         $sys = $dia = null;
         if (! empty($data['bp'])) {
@@ -459,7 +496,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                 return back()->withErrors(['bp' => 'Blood pressure is out of range. The top number must be higher than the bottom one.'])->withInput();
             }
         }
-    
+
         // Each score's unit must suit its type, and "Other" needs a name
         $scores = $data['scores'] ?? [];
         foreach ($scores as $s) {
@@ -470,7 +507,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                 return back()->withErrors(['scores' => 'Give the score a name when the type is Other.'])->withInput();
             }
         }
-    
+
         // --- Citizen profile: did anything actually change? ---
         $newProfile = [
             'full_name' => trim($data['full_name']),
@@ -485,12 +522,12 @@ Route::middleware(['auth', 'role'])->group(function () {
             'phone' => $resident->phone,
         ];
         $profileChanged = $newProfile != $oldProfile;
-    
+
         $currentResidence = DB::table('resident_residences')
             ->where('resident_id', $resident->id)->whereNull('moved_out_on')->first();
         $newAddress = ($data['address'] ?? '') !== '' ? trim($data['address']) : null;
         $addressChanged = ($currentResidence->address ?? null) != $newAddress;
-    
+
         // --- Vital signs ---
         $readings = [
             'temperature_c' => $data['temp'] ?? null,
@@ -500,7 +537,7 @@ Route::middleware(['auth', 'role'])->group(function () {
             'cbg_mgdl' => $data['cbg'] ?? null,
         ];
         $hasVitals = $sys !== null || count(array_filter($readings, fn ($v) => $v !== null)) > 0;
-    
+
         if ($hasVitals) {
             $dupe = DB::table('vital_signs')
                 ->where('resident_id', $resident->id)->where('recorded_by', $user->id)
@@ -512,32 +549,32 @@ Route::middleware(['auth', 'role'])->group(function () {
                 ->where('pulse_bpm', $readings['pulse_bpm'])
                 ->where('cbg_mgdl', $readings['cbg_mgdl'])
                 ->exists();
-    
+
             if ($dupe) {
                 $hasVitals = false;
             }
         }
-    
+
         // --- Nutritional status (the database calculates BMI itself) ---
         $height = $data['height'] ?? null;
         $weight = $data['weight'] ?? null;
         $hasNutrition = $height !== null || $weight !== null;
-    
+
         if ($hasNutrition) {
             $dupeNutrition = DB::table('nutritional_records')
                 ->where('resident_id', $resident->id)->where('recorded_by', $user->id)
                 ->where('recorded_at', '>=', now()->subMinutes(2))
                 ->where('height_cm', $height)->where('weight_kg', $weight)
                 ->exists();
-    
+
             if ($dupeNutrition) {
                 $hasNutrition = false;
             }
         }
-    
+
         $meds = $data['medications'] ?? [];
-    
-        // --- Socioeconomic and social services: meron b nangyari d2 hirap? ---
+
+        // --- Socioeconomic and social services: did anything actually change? ---
         $oldSocioRow = DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)->first();
         $newSocio = [
             'employment_status' => $data['employment'] ?? null,
@@ -555,16 +592,41 @@ Route::middleware(['auth', 'role'])->group(function () {
         $oldServices = DB::table('resident_social_services')->where('resident_id', $resident->id)
             ->pluck('social_service_id')->map(fn ($v) => (int) $v)->sort()->values()->all();
         $socioChanged = $newSocio != $oldSocio || $newServices != $oldServices;
-    
-        if (! $hasVitals && ! $hasNutrition && ! $scores && ! $meds && ! $profileChanged && ! $addressChanged && ! $socioChanged) {
-            return back()->with('status', 'Nothing new to save. Only the citizen profile, socioeconomic details, vital signs, nutrition, scores and medications are stored for now.');
+
+        // --- Photos: files are kept privately in storage/app/private, never in public/ ---
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $profilePhoto = $request->file('profile_photo');
+        $removeProfile = ! $profilePhoto && $request->input('remove_photo') === '1' && (bool) $resident->photo_path;
+        $evidenceFiles = $request->file('photos') ?? [];
+        $hasPhotos = $profilePhoto || $removeProfile || count($evidenceFiles) > 0;
+        $storedPaths = [];
+        $newProfilePath = null;
+        $evidenceRows = [];
+
+        if (! $hasVitals && ! $hasNutrition && ! $scores && ! $meds && ! $profileChanged && ! $addressChanged && ! $socioChanged && ! $hasPhotos) {
+            return back()->with('status', 'Nothing new to save.');
         }
-    
-        DB::transaction(function () use ($hasVitals, $hasNutrition, $height, $weight, $sys, $dia, $readings, $scores, $scoreTypes, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress, $socioChanged, $newSocio, $oldSocioRow, $newServices, $oldServices) {
+
+        // Store the uploaded files first. If saving to the database fails, they are deleted again.
+        if ($profilePhoto) {
+            $newProfilePath = $profilePhoto->store("residents/{$resident->id}/profile", 'local');
+            $storedPaths[] = $newProfilePath;
+        }
+        foreach ($evidenceFiles as $i => $file) {
+            $path = $file->store("residents/{$resident->id}/evidence", 'local');
+            $storedPaths[] = $path;
+            $evidenceRows[] = [
+                'path' => $path,
+                'caption' => trim((string) ($data['photo_captions'][$i] ?? '')) ?: null,
+                'date' => ($data['photo_dates'][$i] ?? null) ?: null,
+            ];
+        }
+
+        $persist = function () use ($hasVitals, $hasNutrition, $height, $weight, $sys, $dia, $readings, $scores, $scoreTypes, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress, $socioChanged, $newSocio, $oldSocioRow, $newServices, $oldServices, $newProfilePath, $removeProfile, $evidenceRows) {
             if ($profileChanged) {
                 DB::table('residents')->where('id', $resident->id)->update($newProfile + ['updated_at' => now()]);
             }
-    
+
             if ($addressChanged) {
                 if ($currentResidence) {
                     DB::table('resident_residences')->where('id', $currentResidence->id)->update(['address' => $newAddress]);
@@ -579,7 +641,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                     ]);
                 }
             }
-    
+
             if ($hasVitals) {
                 DB::table('vital_signs')->insert(array_merge($readings, [
                     'resident_id' => $resident->id,
@@ -590,7 +652,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                     'created_at' => now(),
                 ]));
             }
-    
+
             if ($hasNutrition) {
                 DB::table('nutritional_records')->insert([
                     'resident_id' => $resident->id,
@@ -601,7 +663,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                     'created_at' => now(),
                 ]);
             }
-    
+
             if ($socioChanged) {
                 if ($oldSocioRow) {
                     DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)
@@ -614,11 +676,11 @@ Route::middleware(['auth', 'role'])->group(function () {
                         'updated_at' => now(),
                     ]);
                 }
-    
+
                 // keep only the services that are ticked
                 DB::table('resident_social_services')->where('resident_id', $resident->id)
                     ->whereNotIn('social_service_id', $newServices)->delete();
-    
+
                 foreach (array_diff($newServices, $oldServices) as $serviceId) {
                     DB::table('resident_social_services')->insert([
                         'resident_id' => $resident->id,
@@ -627,7 +689,23 @@ Route::middleware(['auth', 'role'])->group(function () {
                     ]);
                 }
             }
-    
+
+            if ($newProfilePath || $removeProfile) {
+                DB::table('residents')->where('id', $resident->id)
+                    ->update(['photo_path' => $newProfilePath, 'updated_at' => now()]);
+            }
+
+            foreach ($evidenceRows as $row) {
+                DB::table('record_photos')->insert([
+                    'resident_id' => $resident->id,
+                    'uploaded_by' => $user->id,
+                    'file_path' => $row['path'],
+                    'caption' => $row['caption'],
+                    'taken_on' => $row['date'],
+                    'created_at' => now(),
+                ]);
+            }
+
             foreach ($scores as $s) {
                 DB::table('medical_scores')->insert([
                     'resident_id' => $resident->id,
@@ -641,7 +719,7 @@ Route::middleware(['auth', 'role'])->group(function () {
                     'created_at' => now(),
                 ]);
             }
-    
+
             foreach ($meds as $m) {
                 DB::table('medications')->insert([
                     'resident_id' => $resident->id,
@@ -656,19 +734,36 @@ Route::middleware(['auth', 'role'])->group(function () {
                     'updated_at' => now(),
                 ]);
             }
-        });
-    
+        };
+
+        try {
+            DB::transaction($persist);
+        } catch (\Throwable $e) {
+            foreach ($storedPaths as $p) {
+                $disk->delete($p);
+            }
+            throw $e;
+        }
+
+        // The replaced or removed profile photo file is no longer needed
+        if (($newProfilePath || $removeProfile) && $resident->photo_path) {
+            $disk->delete($resident->photo_path);
+        }
+
         $saved = array_filter([
             ($profileChanged || $addressChanged) ? 'citizen profile' : null,
             $socioChanged ? 'socioeconomic details' : null,
+            ($newProfilePath || $removeProfile) ? 'patient photo' : null,
+            $evidenceRows ? count($evidenceRows).' photo'.(count($evidenceRows) > 1 ? 's' : '') : null,
             $hasVitals ? 'vital signs' : null,
             $hasNutrition ? 'nutrition' : null,
             $scores ? count($scores).' score'.(count($scores) > 1 ? 's' : '') : null,
             $meds ? count($meds).' medication'.(count($meds) > 1 ? 's' : '') : null,
         ]);
-    
+
         return redirect('/bhw/residents')->with('status', 'Saved for '.$resident->full_name.': '.implode(', ', $saved).'.');
     });
+
     
     // REMOVE A SCORE ADDED BY MISTAKE (hidden, not erased)
     Route::delete('/bhw/records/{id}/scores/{score}', function (Request $request, $id, $score) {
@@ -869,5 +964,47 @@ Route::middleware(['auth', 'role'])->group(function () {
 
         return redirect("/bhw/records/{$id}/edit")->with('status', 'Medication removed.');
     });
+
+    // PRIVATE PHOTO FILES: only a BHW currently assigned to the resident can open them.
+    // The files live in storage/app/private, so there is no public web address for them.
+    Route::get('/bhw/records/{id}/photo', function (Request $request, $id) {
+        $assigned = DB::table('bhw_assignments')
+            ->where('resident_id', $id)->where('bhw_user_id', $request->user()->id)->whereNull('ended_on')->exists();
+        abort_unless($assigned, 404);
+
+        $path = DB::table('residents')->where('id', $id)->whereNull('deleted_at')->value('photo_path');
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        abort_unless($path && $disk->exists($path), 404);
+
+        return $disk->response($path, null, ['X-Content-Type-Options' => 'nosniff']);
+    });
+
+    Route::get('/bhw/records/{id}/photos/{photo}', function (Request $request, $id, $photo) {
+        $assigned = DB::table('bhw_assignments')
+            ->where('resident_id', $id)->where('bhw_user_id', $request->user()->id)->whereNull('ended_on')->exists();
+        abort_unless($assigned, 404);
+
+        $path = DB::table('record_photos')
+            ->where('id', $photo)->where('resident_id', $id)->whereNull('deleted_at')->value('file_path');
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        abort_unless($path && $disk->exists($path), 404);
+
+        return $disk->response($path, null, ['X-Content-Type-Options' => 'nosniff']);
+    });
+
+    // REMOVE A PHOTO ADDED BY MISTAKE (hidden from the record; the file is kept)
+    Route::delete('/bhw/records/{id}/photos/{photo}', function (Request $request, $id, $photo) {
+        $assigned = DB::table('bhw_assignments')
+            ->where('resident_id', $id)->where('bhw_user_id', $request->user()->id)->whereNull('ended_on')->exists();
+        abort_unless($assigned, 404);
+
+        $removed = DB::table('record_photos')
+            ->where('id', $photo)->where('resident_id', $id)->whereNull('deleted_at')
+            ->update(['deleted_at' => now()]);
+        abort_unless($removed, 404);
+
+        return redirect("/bhw/records/{$id}/edit")->with('status', 'Photo removed.');
+    });
+
 
 });

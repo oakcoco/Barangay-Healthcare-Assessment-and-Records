@@ -88,32 +88,45 @@
             </section>
 
             {{-- Socioeconomic and social services --}}
+            @php
+                $hasOld = session()->hasOldInput();
+                $isOn = fn ($name, $default) => $hasOld ? (bool) old($name) : (bool) $default;
+            @endphp
             <section class="{{ $card }}">
                 <h2 class="text-base font-semibold">Socioeconomic and social services</h2>
-                <p class="mb-3 text-xs text-gray-600">Last updated: [Date]</p>
+                <p class="mb-3 text-xs text-gray-600">Last updated: {{ $socio['updated'] ?? 'not recorded yet' }}</p>
+            
                 <label class="{{ $label }}">Employment status</label>
                 <select name="employment" class="{{ $input }} mb-3">
-                    <option>[Select]</option><option>Employed</option><option>Self-employed</option><option>Unemployed</option><option>Retired</option>
+                    <option value="">[Select]</option>
+                    @foreach (['employed' => 'Employed', 'self_employed' => 'Self-employed', 'unemployed' => 'Unemployed', 'retired' => 'Retired'] as $v => $t)
+                        <option value="{{ $v }}" @selected(old('employment', $socio['employment']) === $v)>{{ $t }}</option>
+                    @endforeach
                 </select>
-                <label class="{{ $label }}">Monthly income</label>
+            
+                <label class="{{ $label }}">Monthly household income</label>
                 <select name="income" class="{{ $input }} mb-2">
-                    <option>[Select range]</option><option>Below 10,000</option><option>10,000 - 20,000</option><option>Above 20,000</option>
+                    <option value="">[Select range]</option>
+                    @foreach (['below_10k' => 'Below 10,000', '10k_to_20k' => '10,000 - 20,000', 'above_20k' => 'Above 20,000'] as $v => $t)
+                        <option value="{{ $v }}" @selected(old('income', $socio['income']) === $v)>{{ $t }}</option>
+                    @endforeach
                 </select>
-
-                @foreach (['philhealth' => ['PhilHealth member', true], 'fourps' => ['4Ps beneficiary', false]] as $name => [$text, $on])
+            
+                @foreach (['philhealth' => 'PhilHealth member', 'fourps' => '4Ps beneficiary'] as $name => $text)
                     <label class="flex h-11 items-center justify-between text-sm">
                         {{ $text }}
-                        <input type="checkbox" name="{{ $name }}" class="peer sr-only" @checked($on)>
+                        <input type="checkbox" name="{{ $name }}" value="1" class="peer sr-only" @checked($isOn($name, $socio[$name]))>
                         <span class="relative h-6 w-11 rounded-full bg-[#CFC8BA] transition peer-checked:bg-[#4E7A1D] after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-5"></span>
                     </label>
                 @endforeach
-
+            
                 <p class="{{ $label }} mt-2">Social services received</p>
                 <div class="flex flex-wrap gap-2">
-                    @foreach (['Food packs', 'Cash aid', 'Senior pension', 'Scholarship'] as $s)
+                    @foreach ($serviceList as $svc)
                         <label>
-                            <input type="checkbox" name="services[]" value="{{ $s }}" class="peer sr-only" @checked($s === 'Food packs')>
-                            <span class="block rounded-full border border-[#CFC8BA] bg-white px-3.5 py-2 text-[13px] peer-checked:border-[#4E7A1D] peer-checked:bg-[#E9F0DD] peer-checked:font-medium peer-checked:text-[#3B5E14]">{{ $s }}</span>
+                            <input type="checkbox" name="services[]" value="{{ $svc->id }}" class="peer sr-only"
+                                @checked($hasOld ? in_array($svc->id, array_map('intval', old('services', []))) : in_array($svc->id, $serviceIds))>
+                            <span class="block rounded-full border border-[#CFC8BA] bg-white px-3.5 py-2 text-[13px] peer-checked:border-[#4E7A1D] peer-checked:bg-[#E9F0DD] peer-checked:font-medium peer-checked:text-[#3B5E14]">{{ $svc->name }}</span>
                         </label>
                     @endforeach
                 </div>

@@ -291,25 +291,38 @@ Route::middleware(['auth', 'role'])->group(function () {
                     .' · '.str_replace('_', ' ', $m->frequency),
             ])->all();
 
+        $socioRow = DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)->first();
+        
         return view('bhw.record-edit', [
             'id' => $resident->id,
             'resident' => [
                 'name' => $resident->full_name,
                 'id' => $resident->resident_no ?? '—',
                 'barangay' => $resident->barangay_name,
-            ],
+                ],
+
             'barangays' => DB::table('barangays')->where('id', '!=', $resident->barangay_id)->orderBy('name')->get(),
             'last' => [
                 'vitals' => DB::table('vital_signs')->where('resident_id', $resident->id)->max('recorded_at'),
                 'nutrition' => DB::table('nutritional_records')->where('resident_id', $resident->id)->max('recorded_at'),
                 ],
+            
+            'socio' => [
+            'employment' => $socioRow->employment_status ?? null,
+            'income' => $socioRow->income_range ?? null,
+            'philhealth' => (bool) ($socioRow->is_philhealth_member ?? false),
+            'fourps' => (bool) ($socioRow->is_4ps_beneficiary ?? false),
+            'updated' => $socioRow ? Carbon::parse($socioRow->updated_at)->format('M j, Y g:i A') : null,
+            ],
+
             'profile' => [
-                'full_name' => $resident->full_name,
-                'birthdate' => $resident->birthdate,    
-                'sex' => $resident->sex,
-                'phone' => $resident->phone,
-                'address' => $address,
-                ],
+            'full_name' => $resident->full_name,
+            'birthdate' => $resident->birthdate,    
+            'sex' => $resident->sex,
+            'phone' => $resident->phone,
+            'address' => $address,
+            ],
+                
             'scores' => DB::table('medical_scores')->where('resident_id', $resident->id)->whereNull('deleted_at')
             ->orderByDesc('recorded_at')->limit(8)->get()
             ->map(fn ($s) => [
@@ -320,8 +333,13 @@ Route::middleware(['auth', 'role'])->group(function () {
             ])->all(), 
             'medications' => $medications,
             
+            //for profile
             'photoCount' => DB::table('record_photos')->where('resident_id', $resident->id)->whereNull('deleted_at')->count(),
             
+            //for socio economic
+            'serviceList' => DB::table('social_services')->orderBy('id')->get(),
+            'serviceIds' => DB::table('resident_social_services')->where('resident_id', $resident->id)
+                ->pluck('social_service_id')->map(fn ($v) => (int) $v)->all(),
         ]);
     });
 
@@ -363,7 +381,7 @@ Route::middleware(['auth', 'role'])->group(function () {
         ]);
     });
 
-    // SAVE RECORD: citizen profile, vital signs, nutrition, scores and medications
+    // SAVE RECORD: citizen profile, socioeconomic, vital signs, nutrition, scores and medications
     Route::post('/bhw/records/{id}', function (Request $request, $id) {
         $user = $request->user();
     
@@ -399,6 +417,10 @@ Route::middleware(['auth', 'role'])->group(function () {
             'cbg' => 'nullable|integer|between:10,800',
             'height' => 'nullable|numeric|between:30,250',
             'weight' => 'nullable|numeric|between:2,400',
+            'employment' => ['nullable', \Illuminate\Validation\Rule::in(['employed', 'self_employed', 'unemployed', 'retired'])],
+            'income' => ['nullable', \Illuminate\Validation\Rule::in(['below_10k', '10k_to_20k', 'above_20k'])],
+            'services' => 'nullable|array',
+            'services.*' => 'integer|exists:social_services,id',
             'scores' => 'nullable|array',
             'scores.*.type' => ['required', \Illuminate\Validation\Rule::in(array_keys($scoreTypes))],
             'scores.*.value' => 'required|numeric|gt:0|max:99999',
@@ -515,11 +537,30 @@ Route::middleware(['auth', 'role'])->group(function () {
     
         $meds = $data['medications'] ?? [];
     
-        if (! $hasVitals && ! $hasNutrition && ! $scores && ! $meds && ! $profileChanged && ! $addressChanged) {
-            return back()->with('status', 'Nothing new to save. Only the citizen profile, vital signs, nutrition, scores and medications are stored for now.');
+        // --- Socioeconomic and social services: meron b nangyari d2 hirap? ---
+        $oldSocioRow = DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)->first();
+        $newSocio = [
+            'employment_status' => $data['employment'] ?? null,
+            'income_range' => $data['income'] ?? null,
+            'is_philhealth_member' => $request->boolean('philhealth') ? 1 : 0,
+            'is_4ps_beneficiary' => $request->boolean('fourps') ? 1 : 0,
+        ];
+        $oldSocio = [
+            'employment_status' => $oldSocioRow->employment_status ?? null,
+            'income_range' => $oldSocioRow->income_range ?? null,
+            'is_philhealth_member' => (int) ($oldSocioRow->is_philhealth_member ?? 0),
+            'is_4ps_beneficiary' => (int) ($oldSocioRow->is_4ps_beneficiary ?? 0),
+        ];
+        $newServices = collect($data['services'] ?? [])->map(fn ($v) => (int) $v)->unique()->sort()->values()->all();
+        $oldServices = DB::table('resident_social_services')->where('resident_id', $resident->id)
+            ->pluck('social_service_id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+        $socioChanged = $newSocio != $oldSocio || $newServices != $oldServices;
+    
+        if (! $hasVitals && ! $hasNutrition && ! $scores && ! $meds && ! $profileChanged && ! $addressChanged && ! $socioChanged) {
+            return back()->with('status', 'Nothing new to save. Only the citizen profile, socioeconomic details, vital signs, nutrition, scores and medications are stored for now.');
         }
     
-        DB::transaction(function () use ($hasVitals, $hasNutrition, $height, $weight, $sys, $dia, $readings, $scores, $scoreTypes, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress) {
+        DB::transaction(function () use ($hasVitals, $hasNutrition, $height, $weight, $sys, $dia, $readings, $scores, $scoreTypes, $meds, $resident, $user, $profileChanged, $addressChanged, $newProfile, $currentResidence, $newAddress, $socioChanged, $newSocio, $oldSocioRow, $newServices, $oldServices) {
             if ($profileChanged) {
                 DB::table('residents')->where('id', $resident->id)->update($newProfile + ['updated_at' => now()]);
             }
@@ -561,6 +602,32 @@ Route::middleware(['auth', 'role'])->group(function () {
                 ]);
             }
     
+            if ($socioChanged) {
+                if ($oldSocioRow) {
+                    DB::table('socioeconomic_profiles')->where('resident_id', $resident->id)
+                        ->update($newSocio + ['updated_by' => $user->id, 'updated_at' => now()]);
+                } else {
+                    DB::table('socioeconomic_profiles')->insert($newSocio + [
+                        'resident_id' => $resident->id,
+                        'updated_by' => $user->id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+    
+                // keep only the services that are ticked
+                DB::table('resident_social_services')->where('resident_id', $resident->id)
+                    ->whereNotIn('social_service_id', $newServices)->delete();
+    
+                foreach (array_diff($newServices, $oldServices) as $serviceId) {
+                    DB::table('resident_social_services')->insert([
+                        'resident_id' => $resident->id,
+                        'social_service_id' => $serviceId,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+    
             foreach ($scores as $s) {
                 DB::table('medical_scores')->insert([
                     'resident_id' => $resident->id,
@@ -593,6 +660,7 @@ Route::middleware(['auth', 'role'])->group(function () {
     
         $saved = array_filter([
             ($profileChanged || $addressChanged) ? 'citizen profile' : null,
+            $socioChanged ? 'socioeconomic details' : null,
             $hasVitals ? 'vital signs' : null,
             $hasNutrition ? 'nutrition' : null,
             $scores ? count($scores).' score'.(count($scores) > 1 ? 's' : '') : null,

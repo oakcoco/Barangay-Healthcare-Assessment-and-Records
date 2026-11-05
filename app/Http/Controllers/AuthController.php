@@ -52,7 +52,11 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect($user->role === 'bhw' ? '/bhw/dashboard' : '/resident/home');
+        return redirect(match ($user->role) {
+            'bhw' => '/bhw/dashboard',
+            'mother_leader' => '/leader/dashboard',
+            default => '/resident/home',
+        });
     }
 
     public function showStep1()

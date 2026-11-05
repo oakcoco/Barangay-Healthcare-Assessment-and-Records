@@ -11,7 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->redirectUsersTo(fn () => auth()->user()?->role === 'bhw' ? '/bhw/dashboard' : '/resident/home');
+       $middleware->redirectUsersTo(fn () => match (auth()->user()?->role) {
+            'bhw' => '/bhw/dashboard',
+            'mother_leader' => '/leader/dashboard',
+            default => '/resident/home',
+        });
         $middleware->alias(['role' => \App\Http\Middleware\EnsureRole::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

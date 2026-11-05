@@ -11,9 +11,14 @@ class EnsureRole
     public function handle(Request $request, Closure $next, ?string $role = null): Response
     {
         $role ??= $request->segment(1);   // 'resident' or 'bhw', taken from the URL
+        
+         if ($role === 'leader') {
+            $role = 'mother_leader';   // the URL says /leader, the account role is mother_leader
+        }
 
         $user = $request->user();
 
+        
         if ($user->status !== 'approved') {
             auth()->logout();
             $request->session()->invalidate();
@@ -25,6 +30,7 @@ class EnsureRole
         $home = match ($user->role) {
             'bhw' => '/bhw/dashboard',
             'resident' => '/resident/home',
+            'mother_leader' => '/leader/dashboard',
             default => null,
         };
 

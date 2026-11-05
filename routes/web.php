@@ -24,6 +24,75 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->n
 // PROTECTED PAGES: must be logged in, and the role must match the URL (/resident or /bhw)
 Route::middleware(['auth', 'role'])->group(function () {
 
+    // MOTHER LEADER DASHBOARD (front end only for now)
+    Route::get('/leader/dashboard', function () {
+        $row = fn ($id) => ['id' => $id, 'name' => '[Name]', 'barangay' => '[Barangay]', 'applied' => '[Date]'];
+    
+        return view('leader.dashboard', [
+            'counts' => [
+                ['label' => 'Pending approvals', 'value' => '[#]'],
+                ['label' => 'Residents', 'value' => '[#]'],
+                ['label' => 'Health workers', 'value' => '[#]'],
+                ['label' => 'Upcoming events', 'value' => '[#]'],
+            ],
+            'pendingResidents' => [$row(1), $row(2), $row(3), $row(4), $row(5)],
+            'pendingBhws' => [$row(6), $row(7)],
+            'bhws' => DB::table('users')->where('role', 'bhw')->where('status', 'approved')->orderBy('name')->get(['id', 'name']),
+            'barangays' => DB::table('barangays')->orderBy('name')->get(['id', 'name']),
+            'stats' => [
+                'perBarangay' => [
+                    ['label' => '[Barangay 1]', 'value' => '[#]', 'pct' => 90],
+                    ['label' => '[Barangay 2]', 'value' => '[#]', 'pct' => 62],
+                    ['label' => '[Barangay 3]', 'value' => '[#]', 'pct' => 40],
+                ],
+                'ageGroups' => [
+                    ['label' => '0-5', 'value' => '[#]', 'h' => 40],
+                    ['label' => '6-17', 'value' => '[#]', 'h' => 70],
+                    ['label' => '18-59', 'value' => '[#]', 'h' => 105],
+                    ['label' => '60+', 'value' => '[#]', 'h' => 60],
+                ],
+                'monthly' => [
+                    ['label' => '[Mon]', 'h' => 50], ['label' => '[Mon]', 'h' => 64], ['label' => '[Mon]', 'h' => 58],
+                    ['label' => '[Mon]', 'h' => 84], ['label' => '[Mon]', 'h' => 96], ['label' => '[Mon]', 'h' => 110],
+                ],
+            ],
+        ]);
+    });
+    
+    // Approving a resident also picks the health worker who will look after them
+    Route::post('/leader/residents/{id}/approve', function (Request $request, $id) {
+        $request->validate(
+            ['bhw_id' => 'required|exists:users,id'],
+            ['bhw_id.required' => 'Choose a health worker before approving a resident.']
+        );
+    
+        return back()->with('status', 'Resident approved and assigned (demo only, nothing is stored yet).');
+    });
+    
+    Route::post('/leader/bhws/{id}/approve', function ($id) {
+        return back()->with('status', 'Health worker approved (demo only, nothing is stored yet).');
+    });
+    
+    Route::post('/leader/{kind}/{id}/reject', function ($kind, $id) {
+        abort_unless(in_array($kind, ['residents', 'bhws'], true), 404);
+    
+        return back()->with('status', 'Sign-up rejected (demo only, nothing is stored yet).');
+    });
+    
+    Route::post('/leader/events', function (Request $request) {
+        $request->validate([
+            'type' => 'required|in:Event,Announcement',
+            'title' => 'required|string|max:100',
+            'date' => 'required_if:type,Event|nullable|date',
+            'time' => 'required_if:type,Event|nullable',
+            'venue' => 'required_if:type,Event|nullable|string|max:100',
+            'barangay_id' => 'required',
+        ]);
+    
+        return back()->with('status', 'Posted (demo only, nothing is stored yet).');
+    });
+
+    
     // RESIDENT HOME PAGE (real data)
     Route::get('/resident/home', function (Request $request) {
         $resident = $request->user()->resident()->with('barangay')->first();
